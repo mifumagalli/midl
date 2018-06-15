@@ -1,0 +1,195 @@
+;+
+;
+; make an header out of an input SB99 file
+;   
+;
+;
+;
+;
+;
+;-
+
+
+
+pro sb99_mkhead, head, inputfile
+
+
+;;make header model
+fxhmake, head
+
+
+;;read input file
+Var=''
+openr, lun, inputfile, /get_lun
+
+;;model
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'MODEL', Var 
+
+;;star formation type
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'SFTYPE', Var 
+
+;;stellar mass
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'MASS', Var 
+
+;;star formation rate
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'SFR', Var 
+
+;;num imf
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'NUM_IMF', Var 
+
+;;imf exponent
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'IMF_EXP', Var 
+
+;;imf mass
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'IMF_MASS', Var 
+
+;;SN cut off
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'SN_CUT', Var 
+
+;;BH cut off
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'BH_CUT', Var 
+
+;;Metal+track
+readf, lun, Var
+readf, lun, Var
+readf, lun, Var
+readf, lun, Var
+readf, lun, Var
+readf, lun, Var
+
+
+case Var of
+    '11':z=0.001
+    '12':z=0.004
+    '13':z=0.008
+    '14':z=0.020
+    '15':z=0.040
+    '21':z=0.001
+    '22':z=0.004
+    '23':z=0.008
+    '24':z=0.020
+    '25':z=0.040
+    '31':z=0.0004
+    '32':z=0.004
+    '33':z=0.008
+    '34':z=0.020
+    '35':z=0.050
+    '41':z=0.0004
+    '42':z=0.004
+    '43':z=0.008
+    '44':z=0.020
+    '45':z=0.050
+    else: z=0
+endcase
+sxaddpar, head, 'METAL', z 
+
+case Var of
+    '11':ty='GEN_STD'
+    '12':ty='GEN_STD'
+    '13':ty='GEN_STD'
+    '14':ty='GEN_STD'
+    '15':ty='GEN_STD'
+    '21':ty='GEN_HIG'
+    '22':ty='GEN_HIG'
+    '23':ty='GEN_HIG'
+    '24':ty='GEN_HIG'
+    '25':ty='GEN_HIG'
+    '31':ty='PAD_STD'
+    '32':ty='PAD_STD'
+    '33':ty='PAD_STD'
+    '34':ty='PAD_STD'
+    '35':ty='PAD_STD'
+    '41':ty='PAD_AGB'
+    '42':ty='PAD_AGB'
+    '43':ty='PAD_AGB'
+    '44':ty='PAD_AGB'
+    '45':ty='PAD_AGB'
+    else: ty='0'
+endcase
+sxaddpar, head, 'TRACKS', ty 
+
+;;wind
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'WIND', Var 
+
+
+;;time
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'TIME_INIT', Var 
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'TIME_SCL', Var 
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'TIME_STEP', Var 
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'NUM_TSTEP', Var 
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'LAST_GRID', Var 
+
+;;iosochrone
+readf, lun, Var
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'INTER_ISOC', Var 
+
+;;l value
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'L_MIMAX', Var 
+
+;;spect time
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'SPECT_TIME', Var 
+
+;;atmosphere
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'ATM', Var 
+
+;;highres metal
+readf, lun, Var
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'HIRES_Z', Var 
+
+;;uv metal
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'UV_Z', Var 
+
+;;rsg
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'RSG', Var 
+
+;;output
+readf, lun, Var
+readf, lun, Var
+sxaddpar, head, 'OUTPUT', Var 
+
+free_lun, lun
+end

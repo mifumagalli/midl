@@ -1,0 +1,118 @@
+;+
+; 
+;
+;  This is a script that helps to compile a list of stars x y ra dec
+;  that can be used then in ccmap iraf task to fit a decent
+;  astrometric solution.
+;
+;  Images as to come with a first decent guess of the WCS
+;
+;   The code open a ds9 window with some regions. Move close to stars
+;   and get rid of apertures that do not match. Save new regions in ds9.reg
+;
+;-
+
+
+pro work_prepare_ccmap, chipimage, sdss=sdss, path=path
+
+
+;;grab header
+head=headfits(chipimage)
+extast, head, astr      
+pxsize=astr.cd[1,1]*3600.
+
+;;query catalogue
+;;find size of field and get object catalogue
+nx=fxpar(head,"NAXIS1")
+ny=fxpar(head,"NAXIS2")
+size = nx > ny 
+field_rad = 0.5*size*pxsize/60.
+
+;;find center 
+xy2ad, 0.5*nx, 0.5*ny, astr, racen, decen
+
+;;query (in principle you should not query in the loop)
+if keyword_set(sdss) then cat='II/294' else cat='USNO-B1'
+splog, 'Query to ', cat
+info=m_queryvizier(cat,[racen,decen],field_rad)
+splog, "Found ", n_elements(info), " objects"
+
+;;extract magnitude, ra and dec
+if keyword_set(sdss) then begin
+    raj2000=info.raj2000
+    dej2000=info.dej2000
+    rmag=info.rmag
+endif else begin
+    rmag=info.R1MAG
+    raj2000=info.raj2000
+    dej2000=info.dej2000
+endelse
+
+
+;;get image position
+ad2xy, raj2000, dej2000, astr, x_abs, y_abs
+
+;;clean negative and cut in mag
+pos=where(x_abs gt 0 and  y_abs gt 0 and rmag lt 20)
+x_abs=x_abs[pos]
+y_abs=y_abs[pos]
+
+;;write ds9 region file
+forprint, x_abs, y_abs, textout=path+'ccdmap/ds9.reg', /nocom
+
+
+;;load dss image
+querydss, [center_ra_deg,center_dec_deg], dss_image, dss_head, imsize=radius , /
+ESO
+
+
+
+spawn, "ds9 "+chipimage+"  -region format xy -region load "+path+'/ccdmap/ds9.reg'
+
+
+print, "end"
+stop
+
+
+end
+
+
+pro prepare_ccmap, imagelist, path, sdss=sdss, next=next
+
+;;ext
+if ~keyword_set(next) then next=0
+
+;;make a subfolder
+spawn, "mkdir -p "+path+"ccdmap"
+
+;;read image list
+readcol, imagelist, filename, format='A'
+
+nimage=n_elements(filename)
+
+for im=0, nimage-1 do begin
+    splog, 'Work on ', filename[im]
+    
+    ;;loop over extension
+    for n=0, next-1 do begin
+        fits=mrdfits(path+filename[im],n+1,head,/sil)
+        chipimg=path+'/ccdmap/chip_'+rstring(n+1)+'_'+filename[im]
+        
+        ;;prepare main head
+        mkhdr, hdr, fits 
+        extast, head, astr      
+        putast, hdr, astr
+        mwrfits, fits, chipimg, hdr, /cr
+
+        ;;call work
+        work_prepare_ccmap, chipimg, sdss=sdss, path=path
+    endfor
+    
+endfor
+
+end
+
+
+
+
+

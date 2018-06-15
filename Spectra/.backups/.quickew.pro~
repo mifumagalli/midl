@@ -1,0 +1,43 @@
+;+
+;
+; Take a file that list the 
+; 
+; ion   restlambda(A)    redshift   min_lambda(A)  max_lambda(A)  spec
+;
+; and compute the E.W.
+;
+;-
+
+
+pro quickew, infile, inflg=inflg, path=path;, out=out
+
+  if ~keyword_set(path) then path='./'
+ 
+  ;;parse file
+  readcol, infile, ion,  wrest,  zabs,  minl,  maxl,  spec, $
+           format="A,F,F,F,F,A"
+
+
+  nline=n_elements(ion)
+  
+  ;obsew=fltarr(nline)
+  ;obsewerr=fltarr(nline)
+  
+
+  splog, "Ion  EW  ERR"
+
+  for i=0, nline-1 do begin
+     
+     flux=x_readspec(path+spec[i],0,inflg=inflg,sig=sig,wav=wav)
+     ew=x_calcew(wav,flux,[minl[i],maxl[i]],sig,sigew)
+     
+     print, ion[i], ew, sigew
+     
+
+  endfor
+
+
+
+
+
+end

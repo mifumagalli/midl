@@ -1,0 +1,61 @@
+;Procedure that reads the IGM transmission from Madau 1995.
+;(madau95_igm.dat)
+;Returns observed lambda (AA), tau and IGM transmission for a given
+;redshift. Redshifts allowed are from 0 to 10 in step of 0.2.
+
+
+
+;redshift -> Redshift at which evaluate the grid
+;lam_mad  -> Output: the observed wavelenght in AA 
+;tau_mad  -> Output: tau
+;igm_mad  -> Output: IGM transmssion
+
+;Written by M.F. on Oct 2009
+;Report bugs to mfumagalli@ucolick.org
+
+
+
+PRO read_madau95, redshift, lam_mad, tau_mad, igm_mad
+
+  skip=7
+  zstep=51
+  zvalues=make_array(zstep,/index)*0.2
+ 
+
+  ;read
+  readcol, getenv("MIDL")+"/IGM/madau95_igm.dat",$
+    lamb, ta, tra, skipline=skip, /silent
+  
+  ;define structure
+  igm_z={LAMBDA:FLTARR(100), TAU:FLTARR(100), TRANS:FLTARR(100)}  
+  igm=REPLICATE(igm_z,zstep)  
+  
+  ;loop and find block of redshift
+  initial=0
+  znow=0
+  for i=1, N_ELEMENTS(lamb)-1 do begin
+     if(lamb[i] GT lamb[i-1]) then begin
+        ;store 
+        igm[znow].LAMBDA[0:(i-initial-1)]=lamb[initial:(i-1)]
+        igm[znow].TAU[0:(i-initial-1)]=ta[initial:(i-1)]
+        igm[znow].TRANS[0:(i-initial-1)]=tra[initial:(i-1)]
+     initial=i
+     znow=znow+1
+     endif
+  endfor
+  
+  ;store final step
+  igm[znow].LAMBDA[0:(i-initial-1)]=lamb[initial:(i-1)]
+  igm[znow].TAU[0:(i-initial-1)]=ta[initial:(i-1)]
+  igm[znow].TRANS[0:(i-initial-1)]=tra[initial:(i-1)]
+
+  ;find closest index and return
+  myred_val=min(abs(zvalues-redshift),myred)
+  print, "Redshift ", zvalues[myred]
+  nonzero=where(igm[myred].LAMBDA GT 0)
+  lam_mad=igm[myred].LAMBDA[nonzero]
+  tau_mad=igm[myred].TAU[nonzero]
+  igm_mad=igm[myred].TRANS[nonzero]
+  
+
+END

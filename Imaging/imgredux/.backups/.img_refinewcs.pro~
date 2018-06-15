@@ -1,0 +1,11 @@
+;+
+;
+; Correct the wcs guess before calling scamp by doing
+;    1) A median shift x/y in each chip
+;    2) Find 3 stars with best match positions
+;
+;
+;
+;
+;
+;-

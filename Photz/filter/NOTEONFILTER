@@ -1,0 +1,22 @@
+-Filter 1-126     provided by the eazy team. 
+
+-Filter 127-130  SDSS dr7 corrected for extinction at 
+ 		 am=1, and instrument.
+
+-Filter 131-136  WFC3 UVIS with all system throughput 
+
+-Filter 137-141  LBC filters with CCD and atmosphere 
+
+-Filter 142-143  LRIS U and B on blue side with CCD and atmosphere
+
+-Filter 144-146  LRIS V,R,I on red side with old CCD (pre2009 upgrade), 
+	         atmosphere and D460 dichroic 
+
+-Filter 147-149  LRIS V,R,I on red side with new CCD (LBNL 2009 upgrade), 
+	         atmosphere and D460 dichroic 
+
+-Filter 150-151  ESI V,R with CCD and atmosphere 
+
+-Filter 152-154  IMACS B,V,R, f/4 with atmosphere, 
+                 and CCD (from manual as Oct 13)
+

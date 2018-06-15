@@ -1,0 +1,26 @@
+;+
+;
+;
+; Take a file that is formatted as the object list for autoslit
+; with the first line the center of the filed and the other lines
+; are for the alignemnt box. It generates a finding chart 
+; for first quick alignemt.
+;
+;
+;-
+
+
+
+pro mask_fc, slitfile
+
+
+
+
+
+
+
+
+
+
+
+end

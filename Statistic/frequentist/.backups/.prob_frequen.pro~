@@ -1,0 +1,37 @@
+;PRO that for a given comulative distribution function, magnitude and impact parameter
+;computes the number of targets expected.
+
+;magnitude---> used to interpolate the cumulative distribution
+;bimpact---> provide same units as in the cumulative distribution.
+;cumulat_file--->where is the cumulative distribution
+;prob--->if keyword set returns the probability according to 1-Exp(-Number)
+
+
+;use \grazian to access /home/mikifuma/PROGETTI/DLAIMAGING/FINALE/lumfunct/mag_cum_grazian.dat
+
+
+
+PRO number_counts, magnitude, bimpact, Number, cumulat_file, GRAZIAN=grazian, PROB=prob
+
+
+
+;define path file
+if (keyword_set(grazian) EQ 0) THEN fileopen= cumulat_file
+if keyword_set(grazian) THEN fileopen='/home/mikifuma/PROGETTI/DLAIMAGING/FINALE/lumfunct/mag_cum_grazian.dat'
+
+
+;read data and interpolation
+readcol, fileopen, mag_data, cnt_data
+
+extract_interpol, mag_data, cnt_data, magnitude, cnt_interpolato, PREC=0.01
+
+
+;compute absolute number
+Number=!Pi*bimpact^2*cnt_interpolato
+
+
+;if set, compute probability
+if keyword_set(prob) then Number=1-Exp(-Number)
+
+
+END

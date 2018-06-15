@@ -1,0 +1,130 @@
+;+
+;
+;  Find the maximum column density required for a line with given 
+;  Doppler parameter to modify the data at 2sigma level 
+;
+;
+;  errspec    the spectrum error for normalized data
+;  zabs       redshift of absorption
+;  velocity   [minv,maxv] to be used for the integration
+;  lambda     rest frame velocity of the transition 
+;  data       the actual normalized flux
+;  continuum  fit a power law continuum to data
+;  guess      the initial log column density for the fit
+;  bval       the doppler parameter 
+;  fwhm       the instrument resolution 
+;  deg        degree of poly fit
+;  nsig       number of sigma for ew variation
+;-
+
+pro deltaew, data, errspec, zabs=zabs, velocity=velocity, $
+             lambda=lambda, inflg=inflg, continuum=continuum, $
+             guess=guess, fwhm=fwhm, bval=bval, deg=deg, nsig=nsig
+  
+
+  if ~keyword_set(deg) then deg=3
+  if ~keyword_set(guess) then guess=13.
+  if ~keyword_set(nsig) then nsig=2.
+
+  ;;open the err spec
+  err=x_readspec(errspec,0,INFLG=inflg,wav=wav)
+  flux=x_readspec(data,0,INFLG=inflg,wav=wavflux)
+  
+  ;;find the relevant region for the fit
+  lobs=(1+zabs)*lambda
+  wvel=(wavflux-lobs)*299792.458/lobs
+  vrange=where(wvel le velocity[1] and wvel ge velocity[0])
+  vnorm=where(wvel le velocity[1]*1.2 and wvel ge velocity[0]*1.2)
+
+  
+  ;;fit new contuinuum 
+  if keyword_set(continuum) then contfit=POLY_FIT(wvel[vnorm],flux[vnorm],deg,YFIT=recont)
+
+  ;;plot data
+  !p.multi=[0,2,2]
+  !x.style=1
+  !y.style=0
+  
+  plot, wvel, flux, xrange=[velocity[0]*1.2,velocity[1]*1.2], psym=10
+  if keyword_set(continuum) then oplot, wvel[vnorm], recont, line=2, color=250
+  
+  ;;renormalize the data
+  reflux=flux
+  reerr=err
+  if keyword_set(continuum) then begin
+      reflux[vnorm]=flux[vnorm]/recont
+      reerr[vnorm]=err[vnorm]/recont
+  endif 
+  
+  ;;oplot renormalized
+  plot, wvel, reflux, xrange=[velocity[0]*1.2,velocity[1]*1.2], psym=10
+  oplot, velocity, [1,1], line=2, color=250
+
+  ;;measure the observed EW before inserting line
+  linstr=x_setline(lambda)
+  ew=x_calcew(wavflux,reflux,minmax(vrange),reerr,errew,/FPIX)
+  splog, "Initial obs EW ", ew, errew
+  
+
+  ;;make column array
+  ncolum=mkarr(-1,1,0.1)+guess
+  nump=n_elements(ncolum)
+  ewall=fltarr(nump)
+  errewall=fltarr(nump)
+
+
+  ;;prepare model
+  inmd=where(wavflux ge lobs-.3 and wavflux le lobs+.3)
+  md_wav=wavflux[inmd]
+  md_vel=299792.458*(md_wav-lobs)/lobs
+  lines=x_setline(lambda)
+  lines.b=bval
+  lines.zabs=zabs
+  
+  for i=0, nump-1 do begin
+      
+     
+      ;;compute 
+      lines.n=ncolum[i]
+      md_fx=x_voigt(md_wav,lines,fwhm=fwhm)
+      
+      ;;convolve model and data
+      pltflx=reflux
+      pltflx[inmd]=pltflx[inmd]*md_fx
+      
+      
+      ;;measure ew
+      tmpew=x_calcew(wavflux,pltflx,minmax(vrange),reerr,tmperr,/FPIX)
+      ewall[i]=tmpew
+      errewall[i]=tmperr
+      
+  endfor
+  
+  ;;plot relative error
+  plot, ncolum, ewall/errewall, psym=1
+
+  ;;find 2sigma
+  ntwosig=interpol(ncolum,ewall/errewall,nsig)
+  splog, "N for 2sigma EW ", ntwosig
+
+
+
+  ;;oplot the final model
+  
+  lines.n=ntwosig
+  md_fx=x_voigt(md_wav,lines,fwhm=fwhm)
+  
+  ;;convolve model and data
+  pltflx=flux
+  pltflx[inmd]=pltflx[inmd]*md_fx
+  
+
+  plot, wvel, pltflx, xrange=[velocity[0]*1.2,velocity[1]*1.2], psym=10
+  oplot, velocity, [1,1], color=250, line=2
+  oplot, wvel, flux, psym=10, line=1
+
+  oplot, md_vel, md_fx, color=250
+
+
+
+end

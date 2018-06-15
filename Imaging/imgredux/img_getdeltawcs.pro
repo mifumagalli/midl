@@ -1,0 +1,23 @@
+;+
+;
+;
+;  Give the RA DEC in coorse WCS image and the actual ra dec to get  
+;  difference to plug in as deltawcs=
+;
+;
+;-
+
+
+
+pro img_getdeltawcs, ra_c, dec_c, ra_r, dec_r
+
+
+  x_radec, ra_c, dec_c, ra_cg, dec_cg
+  x_radec, ra_r, dec_r, ra_rg, dec_rg
+  
+  delta_ra=djs_diff_angle(ra_cg,dec_cg,ra_rg,dec_rg)
+  delta_dec=djs_diff_angle(ra_rg,dec_cg,ra_rg,dec_rg)
+
+  splog, 'Delta RA DEC ', delta_ra*3600., -1*delta_dec*3600.
+    
+end

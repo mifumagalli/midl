@@ -1,0 +1,68 @@
+;+
+;
+;  Return the magnitue correction in a given filter and redshift
+;  using the approximate relations of Inoue et al. 2014
+;
+;  Assumes a slope lambda^beta
+;-
+
+
+PRO inoue_igm, zemi, filter=filter, tigm=tigm, rwave=rwave, IGMmag=IGMmag, $
+               beta=beta, check=check
+
+  ;;stop if bad approx -- see Inoue paper 
+  zemi=zemi[0]
+  if(zemi le 0.5) then stop 
+
+  ;;set default 
+  if ~keyword_set(filter) then filter=1
+  if ~keyword_set(beta) then beta=-2.0
+  
+  ;;call the fortran code
+  spawn, getenv('MIDL')+'/IGM/inoue/ANAigm_v1p0 '+rstring(zemi), output
+  
+  ;;process output 
+  nout=n_elements(output)
+  rwave=fltarr(nout)
+  tigm=fltarr(nout)
+
+  for ii=0, nout-1 do begin
+     out=strsplit(output[ii],' ',/extract)
+     rwave[ii]=1.*out[0]
+     tigm[ii]=1.*out[1]
+  endfor
+  
+  ;;;;compare 
+  ;;read_madau95, zemi, lam_mad, tau_mad, igm_mad
+  ;;figm_readigmcalc, '/Users/miki1/projects/IGM/result/full_evol/IGM_transmit_z2_c91.dat', $
+  ;;                  lam_out, trans_out
+  
+  ;;load filter curves and compute IGM correction 
+  getfilter, filter, lambda=lambdaf, trans=transf
+
+  ;;trim tails
+  trim=where(transf ge 0.0001)
+  lambdaf=lambdaf[trim]
+  transf=transf[trim]
+
+  ;;convolve 
+  wrest=lambdaf/(1+zemi)
+  tigmc=interpol(tigm,rwave,wrest)
+
+  ;;add up 
+  deltal=wrest-shift(wrest,1)
+  deltal[0]=wrest[1]-wrest[0]
+  IGMmag=-2.5*alog10(total(wrest^beta*tigmc*transf*deltal)/total(wrest^beta*transf*deltal))
+  
+  if keyword_set(check) then begin
+     
+     ;;plot 
+     plot, rwave, tigm, yrange=[-0.1,1.1]
+     ;;oplot, lam_mad/(1+zemi), exp(-tau_mad), line=1
+     ;;oplot, lam_out/(1+zemi), trans_out, line=2, color=250
+     oplot, wrest, transf
+     oplot, wrest, tigmc, color=fsc_color('red')
+     
+  endif
+     
+END

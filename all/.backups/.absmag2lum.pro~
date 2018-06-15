@@ -1,0 +1,14 @@
+;procedure that converts absolute AB mag into a luminosity or other way around.
+
+;LUM ---> if set, input is assumed to be a MAG and output is LUM
+;MAG ---> if set, input is assumed to be a LUM and output is MAG
+
+
+PRO absmag2lum, input, output, LUM=lum, MAG=mag
+
+input=1D0*input
+
+IF keyword_set(MAG) THEN output=-2.5*ALOG10(input)+51.595006
+IF keyword_set(LUM) THEN output=10^(-0.4*(input-51.595006))
+
+END

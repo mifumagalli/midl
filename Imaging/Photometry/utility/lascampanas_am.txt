@@ -1,0 +1,13 @@
+#Extinction at Las Campanas from IMACS manual
+# Lambda(A)  Mag/AM
+ 
+ 4342.73   0.19   B
+ 5440.44   0.14   V
+ 6633.11   0.08   R
+ 8033.26   0.04   I 
+ 3629.79   0.48   u
+ 4773.92   0.18   g
+ 6504.34   0.10   r
+ 7735.87   0.04   i
+ 9747.15   0.02   z
+

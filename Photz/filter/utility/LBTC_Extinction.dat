@@ -1,0 +1,15 @@
+#From http://abell.as.arizona.edu/~lbtsci/Instruments/LBC/lbc_description.html
+#Filter       Ext    Error   Central L (nm)
+SDT_Uspec    -0.47  0.02       375
+U-BESSEL     -0.48  0.02       333
+B-BESSEL     -0.22  0.01       422
+V-BESSEL     -0.15  0.02       488
+g-SLOAN	     -0.17  0.02       397
+r-SLOAN	     -0.11  0.02       552
+V-BESSEL     -0.16  0.03       493
+R-BESSEL     -0.13  0.01       572
+I-BESSEL     -0.04  0.01       713
+r-SLOAN	     -0.09  0.02       553
+i-SLOAN	     -0.03  0.01       697
+z-SLOAN	     -0.04  0.02       830
+Y-FAN	     -0.05  0.02       952.5

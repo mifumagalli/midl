@@ -1,0 +1,40 @@
+atm_MK.dat           MK atmospheric transmission
+atm_MK_i.dat         MK atmospheric transmission through I filter 
+atm_MK_r.dat         MK atmospheric transmission through R filter 
+atm_MK_u.dat         MK atmospheric transmission through U filter
+atm_MK_v.dat         MK atmospheric transmission through V filter 
+QE_LRISB.dat         lris QE (blue isde unchanged) 
+QE_LRISR.dat         lris QE pre-upgrade 2009 
+QE_LRISR_NEW.dat     lris QE of chip LBLN 1-13 post upgrade 2009
+LBTC_Red_QE.dat      LBT Camera red  side Q.E. (chip 3)
+LBTC_Blue_QE.dat     LBT Camera blue side Q.E. (chip 3)
+LBTC_Extinction.dat    Atmospheric Extinction in magnitude as a function of central frequency for LBT camera
+LBTC_atmextinction.dat Atmospheric Extinction in relative units as a function of central frequency for LBT camera
+
+B_RED_LRIS.dat  filter transmission for B red side lris
+G_SDSS.dat      filter transmission for g sdss
+I_LRIS.dat      filter transmission for I lris
+R_LRIS.dat      filter transmission for R lris
+U_LRIS.dat      filter transmission for I lris
+U_SDSS.dat      filter transmission for U sdss
+V_LRIS.dat      filter transmission for V lris
+I-_LBCR.dat     LBT Camera Red side I band
+R-_LBCR.dat     LBT Camera Red side R- band
+SD_LBCB.dat     LBT Camera Blue side ST band
+V-_LBCR.dat     LBT Camera Red side V band
+B-_LBCB.dat     LBT Camera Blue side B band
+
+I_LRIS.res      total filter transmission for I lris pre upgrade 2009
+R_LRIS.res      total filter transmission for R lris pre upgrade 2009
+U_LRIS.res      total filter transmission for U lris 
+U_SDSS.res      total filter transmission for U sdss
+V_LRIS.res      total filter transmission for V lris pre upgrade 2009
+B_LRISBR.res    total filter transmission for B lris on red side convolved with  blue side CCD
+I_LRIS_NEW.res  total filter transmission for I lris post upgrade 2009
+R_LRIS_NEW.res  total filter transmission for R lris post upgrade 2009
+V_LRIS_NEW.res  total filter transmission for V lris post upgrade 2009
+B-_LBCB.res     total filter transmission for B- LBC blue side (out of beam)
+I-_LBCR.res     total filter transmission for I- LBC red side  
+R-_LBCR.res     total filter transmission for R- LBC red side 
+SD_LBCB.res     total filter transmission for SD LBC blue side 
+V-_LBCR.res     total filter transmission for V- LBC red side

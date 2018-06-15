@@ -1,0 +1,75 @@
+;+
+;
+;   Take the wcs fit images and produce a median stack to flag the CR
+;   
+;
+;
+;-
+
+pro img_sigmaclip, list_img, list_wgt, list_head, next=next, median=median
+  
+  
+  nimg=n_elements(list_img)
+  
+  ;;load median 
+  medimg=mrdfits(median,1,medimhe)
+  medwgt=mrdfits(median,2,medwghe)
+  
+  ;;process extensions separately 
+  for nn=0, next-1 do begin
+     
+     ;;loop over all the images 
+     for i=0, nimg-1 do begin
+       
+        ;;use each image as the reference of a stack used for reference
+        ref_img=mrdfits(list_img[i],nn+1)
+        ref_wgt=mrdfits(list_wgt[i],nn+1,orig_head)
+        
+        ;;sky sub 
+        mmm, ref_img[where(ref_wgt gt 0)], skymod, skysig
+        ref_img=ref_img-skymod
+        
+        ;;parse scamp header and update current astro
+        mkhdr, header, ref_img, /im
+        img_parsescamp, list_head[i], astro, ext=nn+1
+        putast,  header,  astro
+        ref_head_img=header
+        ref_head_wgt=header
+        
+        ;;aling reference to image 
+        hastrom, medimg, medimhe, new_medimg, new_medimghead, ref_head_img, missin=0.
+        hastrom, medwgt, medimhe, new_medwgt, new_medwgthead, ref_head_img, missin=0.
+
+        mmm, new_medimg[where(new_medwgt gt 0)], medmod, medsig
+        
+        ;;find pixels that are >N sigma fluctuations in residual image
+        ;;but are not detected at more than N sigma in the median
+        ;;image
+        
+        residual=ref_img-new_medimg
+        flag=where(ref_wgt gt 0. and residual gt 5.*skysig and new_medimg lt 3.*medsig)
+        crmask=residual-residual+1
+        crmask[flag]=0.
+        ref_wgt=ref_wgt*crmask
+
+        if(nn eq 0) then begin
+           mwrfits, NULL, list_wgt[i]+".upd", /cre
+           mwrfits, ref_wgt, list_wgt[i]+".upd", orig_head
+        endif else mwrfits, ref_wgt, list_wgt[i]+".upd", orig_head
+        
+        ;mwrfits, ref_img, 'aaaa.fits', /cre
+        ;mwrfits, crmask, 'aaaa.fits'
+        ;stop
+
+     endfor
+     
+  endfor
+  
+  ;;copy over updated weights
+  for i=0, nimg-1 do begin
+     
+     spawn, "mv "+list_wgt[i]+".upd "+list_wgt[i]
+
+  endfor
+
+end

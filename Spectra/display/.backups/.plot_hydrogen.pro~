@@ -1,0 +1,103 @@
+;+
+;
+;   Make a plot of the velocity component for hydrogen
+;
+;  
+;  spect   fits of spectrum
+;  err     fits of error
+;  path    where spectrum is 
+;  vpfit   output file of vpfit
+;  fwhm    instrument resolution
+;  zzero   redshift of the zero velocity component
+;-
+
+
+pro plot_hydrogen, spect=spect, err=err, path=path, vpfit=vpfit, fwhm=fwhm,$
+                   zzero=zzero, vrange=vrange, lrange=lrange, save=save
+
+;;load the spectrum
+if ~keyword_set(path) then path="./j1134/"
+if ~keyword_set(spect) then spect="J1134+5742a_f.fits"
+if ~keyword_set(err) then err="J1134+5742a_e.fits"
+if ~keyword_set(vpfit) then vpfit="./fit/J11+57_fit_twe9.out"
+if ~keyword_set(fwhm) then fwhm=8.0
+if ~keyword_set(zzero) then zzero=3.4108881943
+if ~keyword_set(vrange) then vrange=[-200,200]
+if ~keyword_set(lrange) then lrange=[910,927]
+if ~keyword_set(save) then save="out.eps"
+
+;;open
+spe=x_readspec(path+spect,0,wav=wav,sig=sig,fil_sig=path+err)
+
+;;load model
+g_vpparse, vpfit, v=mode
+
+;;find hydrogen 
+use_h=where(mode.ion eq "H I",nuse_h)
+use_d=where(mode.ion eq "D I",nuse_d)
+
+
+;;loop over component and fill in data structure
+splog, "Found ", nuse_h, " hydrogen components"
+for i=0, nuse_h-1 do begin
+   
+   list_hydrogen, newl, hyd=[mode.n[use_h[i]],mode.b[use_h[i]]], $
+                  err_hyd=[mode.nerr[use_h[i]],mode.berr[use_h[i]]], $
+                  zabs=mode.z[use_h[i]],zsig=mode.zerr[use_h[i]]
+   
+   if(i gt 0) then lines=[lines,newl] else lines=newl
+   
+endfor
+
+;;add deuterium if found
+if(nuse_d gt 0) then begin
+   
+   splog, "Found ", nuse_d, " deuterium components"
+   for i=0, nuse_d-1 do begin
+      
+      list_hydrogen, newl, hyd=[mode.n[use_d[i]],mode.b[use_d[i]]], $
+                     err_hyd=[mode.nerr[use_d[i]],mode.berr[use_d[i]]], $
+                     zabs=mode.z[use_d[i]],zsig=mode.zerr[use_d[i]], /deut
+      lines=[lines,newl]
+      
+   endfor
+   
+endif
+
+
+;;do the min and max value
+lines_min=lines
+lines_max=lines
+
+;;tmp kuldge
+flag=where(lines_min.bsig gt 5.)
+lines_min[flag].bsig=5
+flag=where(lines_min.nsig gt 0.5)
+lines_min[flag].nsig=0.5
+
+lines_min.b=lines_min.b-lines_min.bsig > 0
+lines_max.b=lines_max.b+lines_max.bsig
+lines_min.n=lines_min.n-lines_min.nsig > 0
+lines_max.n=lines_max.n+lines_max.nsig
+
+;;build voigt profile
+splog, "Creating Voigt profile..."
+;modi=x_voigt(wav,lines,FWHM=fwhm)
+;modi_min=x_voigt(wav,lines_min,FWHM=fwhm)
+;modi_max=x_voigt(wav,lines_max,FWHM=fwhm)
+;mwrfits, modi, "tmp_mid.fits", /crea
+;mwrfits, modi_min, "tmp_mid1.fits", /crea
+;mwrfits, modi_max, "tmp_mid2.fits", /crea
+
+
+modi=mrdfits("tmp_mid.fits")
+modi_min=mrdfits("tmp_mid1.fits")
+modi_max=mrdfits("tmp_mid2.fits")
+
+;;call the plot routine
+plot_velocity, spe, sig, wav, model_all=modi, model_min=modi_min, $
+               model_max=modi_max, lines=lines, zzero=zzero, vrange=vrange, $
+               lrange=lrange, save=save
+
+
+end

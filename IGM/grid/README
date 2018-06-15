@@ -1,0 +1,50 @@
+This folder contains the grid of IGM transmission in certain filters
+
+
+Grid for IGM using LRIS filter before CDD upgrade July 2008
+for Lya evolution only: 
+
+IGM_I_LRIS_lya.dat  
+IGM_R_LRIS_lya.dat  
+IGM_U_LRIS_lya.dat  
+IGM_V_LRIS_lya.dat  
+
+
+
+Grid for IGM using LRIS filter before CDD upgrade July 2008
+for full evolution (Lya forest, SLLS, LLS, DLA)
+
+IGM_I_LRIS_full.dat  
+IGM_R_LRIS_full.dat  
+IGM_U_LRIS_full.dat  
+IGM_V_LRIS_full.dat
+
+
+Post LRIS upgrade July 2008, full evolution:
+
+IGM_V_LRISnew_full.dat 
+IGM_R_LRISnew_full.dat
+IGM_I_LRISnew_full.dat
+
+
+LBC full evolution:
+
+IGM_SD_LBC_full.dat 
+IGM_B_LBC_full.dat
+IGM_V_LBC_full.dat
+IGM_R_LBC_full.dat
+IGM_I_LBC_full.dat
+
+
+WFC3 full evolution:
+
+IGM_f390m_WFC3_full.dat 
+IGM_f275w_WFC3_full.dat
+IGM_f390w_WFC3_full.dat
+IGM_f438w_WFC3_full.dat
+IGM_f343n_WFC3_full.dat
+IGM_f336w_WFC3_full.dat
+
+ 
+
+

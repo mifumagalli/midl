@@ -1,0 +1,119 @@
+;+
+;
+; A wrapper to fit gaussians on a cube 
+;
+; wave  - rest frame wave of the cube to fit
+; flux  - associated flux 
+; var   - associated variance 
+; mask  - mask that tells how to group pixels (equal number means
+;         coadd in one spectrum; -1 bad pixels)
+; fit*      - output solution 
+; lines     - rest waves of lines to fit 
+; sign     - -1 accept only absorption lines as good fit, +1 accept
+;            only emisison line
+;-
+
+
+pro ifu_fitgausspect, wave, flux, var, mask,$
+                      fitvel=fitvel,fiterrvel=fiterrvel,$
+                      fitgroup=fitgroup, lines=lines, sign=sign   
+  
+  ;;make AL default 
+  if ~keyword_set(sign) then sign=-1 
+
+  ;;size
+  sz=size(flux)
+
+  ;;identify pixels group pixels
+  fitgroup=find_different(mask[where(mask gt -1)])
+  ngrp=n_elements(fitgroup)
+
+  fitvel=fitgroup*0
+  fiterrvel=fitgroup*0
+
+  ;;loop on groups and construct the mean spectrum 
+  for g=0, ngrp-1 do begin
+     
+     ;;find pixels in a group
+     pix=where(mask eq fitgroup[g])
+     
+     outspc=fltarr(sz[3])
+     outwgt=fltarr(sz[3])
+     outvar=fltarr(sz[3])
+     
+     ;;loop on wave and reconstruct the spectrum  
+     for cc=0, sz[3]-1 do begin
+        
+        ;;slice at w same as mask 
+        slice=flux[*,*,cc]
+        slice_var=var[*,*,cc]
+        
+        
+        ;;find nans and kill them in variance 
+        nanfl=where(slice ne slice, nnnan)
+        masknn=fltarr(sz[1],sz[2])+1.
+        if(nnnan gt 0) then  masknn[nanfl]=0.
+       
+        ;;add masking nans 
+        outspc[cc]=total(mk_finite(slice[pix]/slice_var[pix])*masknn[pix])
+        outwgt[cc]=total(mk_finite(1./slice_var[pix])*masknn[pix])
+        outvar[cc]=total(mk_finite(slice_var[pix]*(1./slice_var[pix])^2)*masknn[pix])
+        
+     endfor
+     
+     ;;norm 
+     outspc=outspc/outwgt
+     outvar=outvar/(outwgt)^2.
+
+     splog, 'Group: ', g+1, ' of ', ngrp
+     splog, 'SN: ', median(outspc/sqrt(outvar))
+
+     ;;x_specplot, outspc, wav=wave, /gal, zin=0., /bl
+
+     ;;now fit gaussians 
+     nline=n_elements(lines)
+     fitsolution=fltarr(nline)
+     fiterror=fltarr(nline)
+     fitpeak=fltarr(nline)
+
+     for l=0, nline-1 do begin
+        
+        ;;fit 
+        fitind = where(wave gt lines[l]-22 and wave le lines[l]+22, Nfit)
+        fit = mpfitpeak(wave[fitind], outspc[fitind], A,  PERROR=perror, CHISQ=CHISQ, dof=dof,$
+                        error=sqrt(outvar[fitind]), estimates=[-100.D,double(lines[l]),1.D,0.D], Nterms=4, /nan)
+     
+        ;;store values 
+        fiterror[l] = perror[1]*sqrt(CHISQ/dof)
+        fitsolution[l] = A[1]
+        fitpeak[l] = A[0]
+
+        ;;go to velocity 
+        fitsolution[l]=(fitsolution[l]/lines[l]-1)*299792.458
+        fiterror[l]=fiterror[l]/lines[l]*299792.458
+        
+        ;;plot 
+        plot, wave[fitind], outspc[fitind], psym=1, title=' Group '+rstring(g+1)+' Line '+rstring(lines[l])
+        oplot, wave[fitind], fit, line=1, color=fsc_color('red')
+        
+        oplot, lines[l]*[1,1], [-1d5,1d5], line=2
+
+     endfor
+     
+     
+     ;;check if good or not in sign (abs or emission)
+     csign=where(abs(fitpeak)/fitpeak eq sign,ngood)
+  
+     ;;print, abs(fitpeak)/fitpeak, ngood, g+1 
+     
+     ;;store value
+     fitvel[g]=mean(fitsolution)
+     fiterrvel[g]=stddev(fitsolution)/sqrt(nline)
+    
+     ;;flag bad 
+     if(ngood lt nline or fiterrvel[g] gt 50) then  fiterrvel[g]=-1
+     
+  endfor
+  
+
+end

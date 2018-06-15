@@ -1,0 +1,106 @@
+;#############################################################################
+;
+; Usage example for the procedure PPXF, which
+; implements the Penalized Pixel-Fitting (pPXF) method by
+; Cappellari M., & Emsellem E., 2004, PASP, 116, 138.
+; The example also shows how to include a library of templates
+; and how to mask gas emission lines if present.
+; 
+
+pro ppxf_kinematics_run
+
+; Read a galaxy spectrum and define the wavelength range
+;
+gal_lin = readfits('spectra_muse/spec_core.fits', h1, exten=1)
+noi_lin = readfits('spectra_muse/spec_core.fits', h1, exten=2)
+wave = sxpar(h1,'CRVAL1') + sxpar(h1,'CDELT1')*((findgen(sxpar(h1,'NAXIS1'))+1)-sxpar(h1,'CRPIX1'))
+
+;Cut spectrum edges (MF)
+oklam = where(wave gt 8480 and wave lt 9100)
+gal_lin = gal_lin[oklam]
+noi_lin = noi_lin[oklam]
+lamRange1 = [8480,9100]
+
+FWHM_gal = 2.5 ; to be evaluated more accurately
+
+; If the galaxy is at a significant redshift (z > 0.03), one would need to apply 
+; a large velocity shift in PPXF to match the template to the galaxy spectrum.
+; This would require a large initial value for the velocity (V > 1e4 km/s) 
+; in the input parameter START = [V,sig]. This can cause PPXF to stop! 
+; The solution consists of bringing the galaxy spectrum roughly to the 
+; rest-frame wavelength, before calling PPXF. In practice there is no 
+; need to modify the spectrum before the usual LOG_REBIN, given that a 
+; red shift corresponds to a linear shift of the log-rebinned spectrum. 
+; One just needs to compute the wavelength range in the rest-frame
+; and adjust the instrumental resolution of the galaxy observations.
+; This is done with the following three commented lines:
+;
+z = 0.01544 ; Initial estimate of the galaxy redshift
+lamRange1 = lamRange1/(1+z) ; Compute approximate restframe wavelength range
+FWHM_gal = FWHM_gal/(1+z)   ; Adjust resolution in Angstrom
+
+log_rebin, lamRange1, gal_lin, galaxy, logLam1, VELSCALE=velScale
+galaxy = galaxy/median(galaxy) ; Normalize spectrum to avoid numerical issues
+;noise=noi_lin/median(noi_lin)
+noise = 0*galaxy +1
+
+; Read the list of filenames from the Single Stellar Population library
+; by CENARRO 
+;
+cenarro = file_search('cenarro_models/scan*.fits',COUNT=nfiles)
+FWHM_tem = 1.5 ; Vazdekis spectra have a resolution FWHM of 1.8A.
+
+; Extract the wavelength range and logarithmically rebin one spectrum
+; to the same velocity scale of the MUSE galaxy spectrum, to determine
+; the size needed for the array which will contain the template spectra.
+;
+fits_read, cenarro[0], ssp, h2
+lamRange2 = sxpar(h2,'CRVAL1') + [0d,sxpar(h2,'CDELT1')*(sxpar(h2,'NAXIS1')-1d)]
+log_rebin, lamRange2, ssp, sspNew, logLam2, VELSCALE=velScale
+templates = dblarr(n_elements(sspNew),nfiles)
+
+; Quadratic sigma difference in pixels Cenarro --> MUSE
+; The formula below is rigorously valid if the shapes of the 
+; instrumental spectral profiles are well approximated by Gaussians. 
+;
+FWHM_dif = SQRT(FWHM_gal^2 - FWHM_tem^2)
+sigma = FWHM_dif/2.355/sxpar(h2,'CDELT1') ; Sigma difference in pixels 
+
+; IMPORTANT: To avoid spurious velocity offsets of the templates, the
+; NPIXEL keyword in PSF_GAUSSIAN must be an odd integer as done below
+;
+lsf = psf_Gaussian(NPIXEL=2*ceil(4*sigma)+1, ST_DEV=sigma, /NORM, NDIM=1)
+for j=0,nfiles-1 do begin
+    fits_read, cenarro[j], ssp
+    ssp = convol(ssp,lsf) ; Degrade template to SAURON resolution
+    log_rebin, lamRange2, ssp, sspNew, VELSCALE=velScale
+    templates[*,j] = sspNew/median(sspNew) ; Normalizes templates 
+endfor
+
+; The galaxy and the template spectra do not have the same starting wavelength.
+; For this reason an extra velocity shift DV has to be applied to the template
+; to fit the galaxy spectrum. We remove this artificial shift by using the
+; keyword VSYST in the call to PPXF below, so that all velocities are
+; measured with respect to DV. This assume the redshift is negligible.
+; In the case of a high-redshift galaxy one should de-redshift its 
+; wavelength to the rest frame before using the line below (see above).
+;
+c = 299792.458d
+dv = (logLam2[0]-logLam1[0])*c ; km/s
+
+vel = 1d ; Initial estimate of the galaxy velocity in km/s
+goodPixels = ppxf_determine_goodPixels(logLam1,lamRange2,vel)
+
+; Here the actual fit starts. The best fit is plotted on the screen.
+; Gas emission lines are excluded from the pPXF fit using the GOODPIXELS keyword.
+;
+start = [vel, 180d] ; (km/s), starting guess for [V,sigma]
+ppxf, templates, galaxy, noise, velScale, start, sol, GOODPIXELS=goodPixels, /PLOT, MOMENTS=4, DEGREE=4, $
+    VSYST=dv, ERROR=error
+
+print, 'Formal errors:    dV    dsigma       dh3       dh4'
+print, error[0:3]*sqrt(sol[6]), FORMAT='(10x,2f10.1,2f10.3)'
+
+         
+end
+;------------------------------------------------------------------------------

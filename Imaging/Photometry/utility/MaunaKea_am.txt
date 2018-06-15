@@ -1,0 +1,6 @@
+Table of Air Mass coefficient from Cooke et al.
+U  0.41
+B  0.19
+V  0.12
+R  0.11
+I  0.07

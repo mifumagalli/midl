@@ -1,0 +1,97 @@
+;when uppelimit set, compute upperlimit. Extra parameters are needed in file upper.par.
+
+
+PRO compute_sfr, code, zdla, UPPER=upper, SAVE=save 
+
+;zblock=50
+;studia_sfr, code, zdla, zblock 
+
+IF ~keyword_set(UPPER) THEN BEGIN
+;read photometry
+cod=STRTRIM(STRING(code),2)
+file=STRING("/home/mikifuma/PROGETTI/DLAIMAGING/FINALE/photometry/DLA",cod,"_phot_cal.cat")
+
+readcol, file, Name, Umg, Umge, USN, UF, UFE, FORMAT="A,F,F,F,D,D", skipline=1
+ENDIF
+
+
+IF keyword_set(UPPER) THEN BEGIN
+; for extra parameters
+readcol, "upper.par", TAG, FILENAME, XPOS, YPOS, BOXSIZE, APERTURE, PS, EXTINCTION, $
+          format="A,A,F,F,F,F,F,F"
+
+;resolve and call upperlimit
+upperlimit, FILENAME, XPOS, YPOS, BOXSIZE, APERTURE, PS, EXTINCTION, UF
+;set fake error
+ufe=0.1*uf 
+
+ENDIF
+
+ 
+
+
+;compute distance
+distance_calculator, zdla, Distance, /lum, /DEF
+
+cgs, cns
+Distance=Distance*1D6*cns.pc
+
+
+;simple luminosity + K-correction
+Lum=(UF*4*!PI*Distance^2)/(1+zdla)
+ErrLum=(UFE*4*!PI*Distance^2)/(1+zdla)
+
+
+;simple star formation (Madau 1998) @1500A corrected for Chabrier IMF (/1.59) from Salim 2007
+SFR=Lum*7.9114D-29
+errSFR=ErrLum*7.9114D-29
+
+
+
+;IGM correction (Madau 1995)
+;readcol, "../filter/U_filter.dat", Lfilt, transm
+;madau_igm, Lfilt, transm, zdla, cIGM
+
+
+;IGM correction 
+figm_correction, zdla, cIGM, FILT='u_lris'
+
+print, "IGM correction ", cIGM
+
+;dust reddy 2004
+IF(zdla LT 2) THEN dust=4.3
+IF(zdla GE 2 AND zdla LT 2.5) THEN dust=4.4
+IF(zdla GE 2.5) THEN dust=4.7
+
+cdust=FLTARR(N_ELEMENTS(SFR))
+
+highsf=where(SFR*cIGM GT 20, nhsf, complement=lowsfr)
+IF(nhsf GT 0) THEN cdust[highsf]=dust
+IF(nhsf LT N_ELEMENTS(SFR)) THEN cdust[lowsfr]=2.3
+
+ 
+
+
+;sfr corretta
+SFRcorr=SFR*cdust*cIGM
+SFRerrcorr=errSFR*cdust*cIGM
+
+IF keyword_set(save) THEN BEGIN
+outfile=STRING("DLA",cod,"_sfr.cat")
+forprint, Name, SFR, errSFR, SFRcorr, SFRerrcorr, cdust, $
+          comment="Flag, SFR, errSFR, SFRcorr, errSFRcorr, dust (Unit Msun/yr)",$
+	  textout=outfile
+
+openu, Unit, outfile, /get_lun, /append
+printf, unit, "Correction:"
+printf, unit, "IGM: ", cIGM
+free_lun, Unit
+ENDIF
+
+IF ~keyword_set(UPPER) AND ~keyword_set(save) THEN  forprint, Name, SFR, errSFR, SFRcorr, SFRerrcorr, cdust,textout=1
+IF keyword_set(UPPER) THEN BEGIN
+print, "Upper limit 1/5 sigma (noigm/igm): "
+forprint, SFR, SFRcorr/cdust, textout=1
+ENDIF
+
+END

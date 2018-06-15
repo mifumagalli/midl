@@ -1,0 +1,389 @@
+
+			*** INSTRUCTIONS ***
+
+Last Revision: M.Fossati 23-11-2015
+
+** Purpose **
+
+Interactively examine a FITS datacube (x,y,lambda).
+kubeviz also provides interactive functionality to fit emission lines 
+using mpfit, & select sub-sections of the cube for line fitting and 
+further arithmetic. 
+
+** Calling sequence **
+
+kubeviz [,datafile] [,noisefile=noise_file] [,ext=ext] [,noise_ext=noise_ext] 
+[,trim=trim] [,fluxfac=fluxfac] [,smooth=spax_smooth] [,specsmooth=spec_smooth] 
+[,traspose=transpose] [,help=help] [,version=version] [,debug=debug]
+[,vacuum=vacuum] [,logarithmic=logarithmic] [,waveunit=waveunit] 
+[,redshift=redshift] [,do_mc_errors=do_mc_errors] [,bootstrap=bootstrap_file] 
+[,nmontecarlo=nmontecarlo]  [,plot_mc_pdf=plot_mc_pdf] [,save_mc_pdf=save_mc_pdf]   
+[,use_mc_noise=use_mc_noise] [,scroll=scroll] [,lineset=lineset]  
+[,mask_sn_thresh=mask_sn_thresh] [,mask_maxvelerr=mask_maxvelerr]  
+[,mom_thresh=mom_thresh] [,spmask=spmask] [,instr=instr] [,band=band]
+[,batch=batch] [,fit_all_lines=fit_all_lines] [fix_ratios=fix_ratios]
+[,resfile=results_file] [,fittype=fittype] [,fitpars=fitpars]
+
+
+** Description of the calling sequence keywords **
+
+datafile:    (mandatory) name of the datacube FITS file.
+	     If no path is given, the file is assumed to be in the current directory.
+	     If the file has extension '.sav' it is assumed to be a previously saved
+	     session (all other keywords are disregarded)
+noisefile:   (optional) Name of the separate noise file. If provided the ext and 
+             noise_ext defaults are 0 or 1 (if ext 1 exists) 
+ext:	     (optional) FITS extension of data cube (default=1)
+noise_ext:   (optional) FITS extension of noise cube (default=2)
+trim:	     (optional) formatted string to define which portion of the datacube 
+             needs to be loaded. The string must have the following syntax 
+	     '[x1:x2,y1:y2,z1:z2]'. The wildcard * can be used to select all element 
+	     along a dimension ('[x1:x2,*,*]'). The indices are 1 based as in IRAF 
+	     and ds9 and both the extremes are included.  
+zoomfac:     (optional) integer factor by which to multiply the spaxel axes of data 
+             cube for display
+fluxfac:     (optional) factor to multiply flux-scale (default instrument dependent)
+smooth:      (optional) spatial smoothing kernel in spaxels (default 1)
+transpose:   (optional) transpose data? 
+help:	     (optional) Show instructions and exit
+version:     (optional) Show version and exit
+logarithmic: (optional) Use if wavelength solution in header is logarithmic
+vacuum:      (optional) Use if wavelength solution in header is in vacuum. For known 
+             instruments it is automatically set.
+waveunit:    (optional) Unit of wavelength (input frame) if not in CUNIT3 keyword 
+redshift:    (optional) redshift of target (default 0)
+do_mc_errors:(optional) choice of error type for linefitting. Default 0 (noise cube)
+	     0: Single fit with errors from noise cube
+	     1: Bootstrap cubes (requires multi-extension bootstrap cubes as input)
+	     2: MonteCarlo 1: generates monte-carlo cubes via adding random gaussian
+	     distributed errors with the noise cube as amplitude and THEN smooth
+	     3: MonteCarlo 2: As Monte Carlo 1 but smooths before generating 
+	     monte-carlo cubes.
+	     4: MonteCarlo 3: As Monte Carlo 2 but with residuals from a first fit
+	     instead of the noise cube. The residuals are randomly shifted along the 
+	     wavelenght axis
+bootstrap:   (optional) bootstrap fits file = multi-extension fits datacube
+	     Primary header should contain NEXT parameter containing number of 
+	     extensions (realisations). 
+	     Then each extension should contain one realisation of the datacube. 
+	     The file is searched in the datacube directory if no path is given.  
+nmontecarlo: (optional) number of monte-carlo realisations where required [100]
+plot_mc_pdf: (optional) save diagnostic plots of distribution of results with 
+             multiple realisations
+save_mc_pdf: (optional) save the distribution of results with multiple realisations 
+             into a multiextension FITS table.
+use_mc_noise:(optional) use the noise cube computed from the monte-carlo cubes
+scroll:      (optional) force display of scrollbar in linefit window
+lineset:     (optional) select only one set of lines to fit. (Default = all lines)
+	     1: Ha+[NII]
+	     2: Hbeta 
+	     3: [OIII]
+	     4: [SII]
+	     5: [OI]
+	     6: [SIII]
+	     7: [HeI]
+	     8: Lya
+debug:       (optional) increase verbosity for code debugging.
+mask_sn_thresh: (optional) S/N (amplitude) threshold for autoflag acceptance for a 
+                line fit.  Default=3.
+mask_maxvelerr: (optional) velocity (or dispersion) error threshold for autoflag 
+                accepatance of a line fit. Default=50 km/s.
+mom_thresh:  (optional) flux error threshold for 1st and higher moments computation. 
+             Not used for the 0th moment (total flux). Default 0.5
+spmask:      (optional) name of the spaxel mask FITS file to be loaded.
+instr:       (optional) instrument. If datafile primary header contains INSTRUME 
+             keyword it overrides.
+band:	     (optional) band (for info on instrumental resolution and wavelength 
+             range). For ESO instruments taken from header.
+batch:       (optional) run kubeviz without the GUI. Run fit of all spaxels, save 
+             the results file and the session file. If spmask is given the fit 
+	     loops over all the masks, saves the results and the session file.	 
+fit_all_lines: (optional, makes sense only with /batch) fit all the lines in the 
+             selected lineset. If not set fit only the mainline.
+fix_ratios:  (optional) fix the intensity ratios for NII, OIII and OI lines. 
+             Ratios from Storey & Zeippen 2000
+resfile:     (optional) load a kubeviz formatted results file. It is searched in 
+             the current working dir if no path is given.
+fittype:     (optional) choice of type of fitting. Can be 'gauss' (Default) or 
+             'moments'. 
+outdir:      (optional) the directory where output files are written
+logunit:     (optional) logical unit number where the terminal output is redirect. 
+             The unit must be already open. If not set the output is sent to the 
+	     terminal.
+fitpars:     (optional) a vector of 6 or 8 elements specifying (1,2 optional) 
+             fitrange; 3,4 cont min/max offset; 5,6 cont min/max percentiles; 
+	     7 continuum polynomial order; 8 continuum mode (0 = use offset 
+	     windows, 1= use MPFIT in fitrange)  	  
+	     
+	     
+** Quick start (for the GUI): **
+
+Click left mouse button to move crosshair (or to select spaxels in Mask mode).
+Select image plane with slidebar or using left mouse button in the 
+spectrum window. Fine tune image plane selection with "<" and ">" keys.
+Fine tune spatial location with cursor keys in spaxel window.
+Set wavelength range selection using the "s" key (in spectrum window)
+Select Mode -> Sum1 to see the spaxel map over the selected wavelength range 
+Drag with right mouse button to change brightness/contrast.
+(Click left mouse button to get keyboard focus.)
+Toggle zoom to see the zoomed spectrum around the selected wavelength 
+Select the lines to fit (and the continuum if required) and those to
+be shown in the spec zoom window. Make sure the spectral resolution R
+value makes sense.
+Click FIT for a single spaxel fit or FIT ALL to fit all spaxels.
+
+
+** Kubeviz modes: ** 
+
+Kubeviz can be run in three different and complementary ways:
+1. Interactive mode. This is the main mode that allows the user to take 
+   advantage of all the program functions. This is the default mode. 
+2. Batch mode. This mode is called by setting the /batch keyword. The	 
+   program automatically performs a fit of all spaxels and saves both	
+   the results in a .fits file named [inputfile]_res.fits and the session
+   in a file named [inputfile].sav. If /fit_all_lines is set then all the
+   lines in the selected lineset are fit (narrow components). Otherwise 
+   only the mainline is fit. Needs the redshift keyword to be set.
+3. Load session. This mode loads a kubeviz saved session. It is called by
+   providing a .sav file instead of a fits input datacube. All other	
+   keywords are disregarded. This allows to load a session made in  
+   batch mode for quality assessment and further interactive processing. 
+In addition an hybrid mode exists. If the keyword resfile is specified a
+new session is created but the results saved in the resfile are loaded.  
+This allows fit results produced with other codes to be inspected.	
+
+** Description of buttons: **
+
+  **Spaxel Viewer**
+
+The Menu Bar in the spaxel viewer controls the main functions of the	
+program. Commands are grouped according to function.			
+
+In the File menu:
+  Open: 	      open a new input datacube. The keywords set during the first call
+		      are used. The current session is saved before being destroyed.  
+  Save image as EPS:  print the current spaxel view into a .eps file.
+  Save image as FITS: save the current image and associated noise into a 
+             	      fits file. If a linefit image plane is selected it is written
+	     	      to the file with the associated 1-sigma uncertainty plane.
+  Save cube as FITS:  save the current cube data and noise extension into a
+                      fits file.
+  Display header:     display the fits header. A dialog box will ask which 
+                      header to display (primary, data or noise).
+  Save session:       save the current session (snapshot of the allocated memory)
+		      into a file. 
+  Load session:       load a saved session. 
+  Quit:               close kubeviz and free the memory. The session is saved into 
+                      "lastsession.sav"
+
+In the Cube menu:
+  Data:       	  show the datacube
+  Noise:      	  show the noisecube
+  BadPixels:  	  show the badpixelmask
+  S/N:            show the signal to noise cube. Both data and noise spectra are
+              	  shown in the spectrum viewer.
+  Linefit:    	  show spaxel fit map. Does not work with masks. If no result
+	      	  plane is set in the linefit window the flag map is shown
+  Linefit errors: show the average +/- 1 sigma error map
+  Linefit S/N:    show the linefit significance (value/avg. err) map. 
+
+In the Zcut menu:
+  Select the color scale for the spaxel viewer. The default is HistEq.
+  The User defined cuts can be changed interactively in User parameters. 
+  After the limits have been chosen,clicking on APPLY makes the User 
+  linear cut active by default.
+
+In the Colour menu:
+  Select one of the color schemes. Default is Grey.  
+  Invert: invert the current color scheme.
+
+In the Cursor menu:
+  Crosshair: activate the crosshair. If mask mode is active this reverts to 
+	     spaxel mode.
+  None:      removes any active cursor (mask or spaxel). The last fit mode 
+	     remains active.
+
+In the Spax.Masks menu:
+  Select:        switches to mask mode. Click left mouse button to select spaxels.
+  Deselect:      click left mouse button to deselect spaxels.
+  Clear:         deselects all mask spaxels. The mask is not deleted.
+  Optimal Mask:  automatically define a mask based on spaxels with S/N > 5 in 
+                 the currently displayed image.
+  New Mask:      define a new empty mask. Step through masks with keys "k" and "l" 
+  Save:          save the current mask. 
+  Load:          load a saved mask. 
+  Delete Mask:   delete the current mask. The last mask cannot be deleted.
+  Go to Mask:    a dialog appears and the user can set to which mask to move. 
+                 Useful in case many masks are defined.
+  Previous Mask: Go to the previous mask
+  Next Mask:     Go to the following mask		
+  
+In the Mode menu:
+   Slice:         show a single wavelenght slice. 
+   Sum1:          compute the summed image over selected wavelength range. The range 
+                  can be selected by pressing the "s" key in the spectrum viewer.
+   Median1:       as Sum1 but compute the median image. 
+   Weighted Avg1: compute the inverse variance weighted average of the flux
+                  values over selected wavelength range.
+   Weighted Med1: as above but compute the inverse variance weighted median.		  
+   MedSub1:       show a single slice minus the median image over selected range.
+   
+   Options with 2 refer to the second wavelength range. It can be defined using
+   the Sel Range button in the spectrum viewer. A second range can be selected by
+   pressing Sel Range --> Range2 in the spectrum viewer and then defined with the
+   "s" key.
+   
+   Med2 - Med1:  show the difference of the median images over the two selected
+	         ranges. 
+   Med1 - Med2:  same as above but reversed.
+	      
+In the Errors menu:
+  Use the five options to switch between different error methods. If  
+  a method is called for the first time the corresponding cubes are created.
+  Montecarlo methods can use a lot of RAM memory. Make sure you have enough free
+  memory before calling one of those methods. A back of the envelope math to assess
+  how much memory you need is to assume N [100] times the size of the input datacube
+  (only the data extension). 
+  0) Noise cube: use the fit uncertainties from the inverse variance weighted fit.  
+  1) Bootstrap cubes (requires multi-extension bootstrap cubes-frame as input)
+  2) Monte Carlo 1 : generates monte-carlo cubes by adding random gaussian 
+     distributed errors with the noise cube as amplitude and THEN smoothing. 
+  3) Monte Carlo 2 : as Monte Carlo 1 but smooths before generating the cubes.
+  4) Monte Carlo 3 : as Monte Carlo 2 but with residuals from a first fit   
+     instead of the noise cube. The residuals are also randomly shifted along 
+     the wavelength axis.
+     
+In the Options menu:
+  Smooth parameters: pops-up a window where the smooth parameters can be changed.
+    This has effect only after a click on the Apply button. The current linefit
+    results are reset. Consider saving them first!
+  Use Montecarlo Noise: switch on/off the option to use the noise computed from
+     the montecarlo realisations. The default is off.
+  Save Montecarlo Plots: switch on/off the option to save diagnostic plots 
+     of distribution of results with multiple realisations.
+  Save Montecarlo PDFs: switch on/off the option to save all the results from the
+     fit of montecarlo cubes in a FITS table.
+  Scale Noisecube Error: switch on/off the option to rescale the formal fit errors
+     assuming a chisq per degree of freedom equal to 1.      
+  Load Results File: load an external file where Kubeviz fit results are stored.
+  
+In the Help menu:
+  What's new:         display a detailed change-log. 
+  Instructions:       display this document. 
+  Keyboard shortcuts: display a list of keyboard shortcuts. 		   
+
+The bottom part of the spaxel viewer lists some useful info about the currently
+active visualization mode. The coordinates of the selected spaxel are given in 
+the Image frame which corresponds to the shown image and in Physical coordinates
+which are the coordinates in the original cube. Those values are different only
+if a portion of the cube has been loaded using the trim keyword. The third value
+is the spaxel value in the current view. The WCS coordinates are RA, DEC and 
+Lambda (in Angstrom). The current values of the smooth parameters, of the number
+of defined masks as well as the selected cube and wavelength mode are also shown.
+
+  **Spectrum Viewer**
+
+The buttons in the spectrum viewer allow you to change the parameters to inspect 
+the spectra.
+  zmin and zmax: set the spectrum flux scale (and the spaxel color scale for 
+		 User and Sqrt zcuts) 
+  Fix Scale: toggle the fixed vs auto flux scale. 
+  Toggle Zoom: show/hide the spectral zoom window. Change the zoom using + or -.
+  Save: save the current spectrum + noise spectrum in fits format. 
+  Sel Range: select the container (1 or 2) to store user defined spectral
+	     region. A Reset button is also available. 
+  Mode: select the spectrum view mode. Slice: show a single spaxel spectrum.   
+	Sum, Median, Weighted average (in combination with a mask) 
+	show the summed/median/average spectrum of the selected spaxels. 
+	Optimal: use the Robertson (1986) method to obtain an optimal extraction 
+	over the selected spaxels. The method is designed for point-like sources 
+	and is sensitive to the background subtraction quality. Use with caution!
+
+  **Linefit Window**
+
+The linefit window allows the user to set the parameters for the fit, perform the 
+fit and see the results in real-time. 
+Several options and parameters can be specified.
+
+The fit is performed in linesets (set of lines to be fitted simultaneously). Several
+linsets are defined in kubeviz, each having a mainline. The linesets are: 
+
+  1: Ha (6562A) + [NII] (6548,6584A)   Mainline: Ha 
+  2: Hb (4851A) 		       Mainline: Hb 
+  3: [OIII] (4959,5007A)	       Mainline: [OIII] (5007A) 
+  4: [SII]  (6716,6731A)	       Mainline: [SII]  (6731A) 
+  5: [OI]   (6300,6364A)	       Mainline: [OI]	(6364A) 
+  6: [SIII]
+  7: [HeI]
+  8: Lya (1215A)                       Mainline: Lya
+  
+If the lineset keyword is not set all the lines are searched into the spectrum   
+using the provided redshift. Those falling into the valid wavelength
+range can be fit. In future it will be possible to read a list of lines and the 
+associated linesets from a user defined file.
+The redshift keyword is mandatory for the fit. If it has not been set during the 
+kubeviz call it should be manually edited. Alternatively it can be interactively 
+defined by selecting a wavelenght slice and pressing "z" in the spectrum viewer. 
+In this case the idenfitied line is assumed to be the mainline of the active lineset.
+
+For each line a narrow and broad component can be fit togheter with the continuum.
+The show buttons make the fit to the selected component appear
+overplotted in the spectral zoom window. 
+The region of the spectrum to be included in the fit can be modified by changing
+the values of the Fitting Range. (blue- and red-wards w.r.t. the mainline)
+The continuum is fit by defining two "continuum regions" offset by +/- [min,max]
+from the mainline, then taking the values within two percentiles and fitting a  
+polinomium. All these parameters and the order of polinomium can be changed.	
+The continuum regions where another line is expected are rejected.
+The fit can be constrained by specifying start values (if they are not set they 
+are guessed automatically) and boundaries for each parameter. The user limits are 
+used only if the button "Fit with constraints?" is set.
+The fix buttons can be used to fix a parameter to the start value. The line ratios
+of OI, OIII and NII lines can be fixed during the fit and the values of the ratios
+are from Storey & Zeippen 2000. In this case no errors are output for the flux of 
+the fainter line.
+
+The instrumental resolution at the wavelength of the mainline needs to be computed 
+in order to obtain the intrinsic line width. For all the instruments it can be 
+estimated by fitting the peaks in the variance spectrum, assumed to be skylines. The 
+accuracy of this method depends on the presence of strong skylines in the wavelength 
+region of interest and typically works well in the NIR (Y,J,H, partially in K). 
+For KMOS, the resolution can be described by a polynomial as a function of wavelength. 
+If the polynomial coefficients are written in the datafile header they are uploaded. 
+Otherwise they are sourced from the kubeviz templates directory which hosts general 
+curves for each IFU at different observing epochs. The closest in time to the 
+current data is used.
+
+The buttons in the bottom part of the window allow you to perform the fit and inspect 
+the results. The active error method and the status of the "Montecarlo plots"	   
+option are also shown. Description of the available buttons:
+  FIT:      fit the current spaxel/mask.
+  FIT ALL!: fit all spaxels/masks. After the fit each result is flagged as OK or  
+	    BAD according to the following criteria: 
+	    - S/N of at least one line > mask_sn_thresh and 
+	    - velocity (and dispersion) error < mask_maxvelerr. 
+  AUTO FLAG ALL!: Flag the results of the fit spaxels/masks. The flag
+                  for a current spaxel can be altered by left clicking
+		  on the flag value OK/BAD. The autoflag thresholds can be
+		  changed interactively. 
+  FIT ADJ: fit spaxels with BAD flag where they are adjacent to other spaxels with  
+	   flag OK, using the solution from the adjacent spaxels for an initial     
+	   guess. The procedure iterates until no more successes. 
+  FLAG ON/OFF: When one of the linefit maps is displayed this button shows/hides   
+	       the spaxels with BAD flag.
+  SAVE:    save the current error method results into a fits file. Details on how the 
+	   result planes are packed into a single result cube are given in the header. 
+  RESET ALL PARS: reset the currently displayed results and the editable options to 
+		  defaults. Has the same effect as clicking each reset button.     
+		  User defined limits and button selections are not reset. 
+  RESET USER PARS: reset the user supplied start, min and max values for the fit   
+		   with constraints.
+  MASK/SPAXEL: switch between mask and spaxel fitting mode. Cursor mode is changed
+	       accordingly. The "-" and "+" buttons on the top of the window allow 
+	       to step through masks (only if mask mode is selected).
+  GAUSS/MOMENTS: switch between fitting a gaussian profile or computing the moments
+                 of a given line. Some options are available only in one of the two 
+		 modes. If the moments method is selected, a threshold (th) can be 
+		 applied to select only flux values th times above the continuum noise.
+		 The threshold is not applied for the 0th order moments (integrated 
+		 fluxes).      

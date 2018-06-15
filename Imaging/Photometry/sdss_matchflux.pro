@@ -1,0 +1,118 @@
+;+
+;
+;
+;   Give an RA,DEC and radius and grab all the 
+;   objects in sloan. Give then a 
+;
+;
+;
+;-
+
+
+pro sdss_matchflux, catall, sdssfilt, pathcat=pathcat, save=save, check=check 
+
+  
+  ;;load first cat
+  readsexphot, catall[0], obj, path=pathcat
+  
+  ;;find sdss area
+  ;;find the min max ra-dec
+  min_ra=min(obj.ALPHA_J2000)
+  max_ra=max(obj.ALPHA_J2000)
+  min_dec=min(obj.DELTA_J2000)
+  max_dec=max(obj.DELTA_J2000)
+  
+  cent_ra=0.5*(max_ra-min_ra)+min_ra
+  cent_dec=0.5*(max_dec-min_dec)+min_dec
+  
+  edge_ra=0.5*(max_ra-min_ra)*60. 
+  edge_dec=0.5*(max_ra-min_ra)*60.  
+
+  fov=2.*(edge_ra > edge_dec)
+  
+  ;;get sdss and make space for other phot
+  splog, 'Query SDSS at ', cent_ra,cent_dec, ' in arcmin ', fov  
+  info=QueryVizier('II/306', [cent_ra,cent_dec], fov, /ALLCOLUMNS, /CANADA)
+
+  tmpstr={MATCHM_U:0.,ERR_MATCHM_U:0.,MATCHM_G:0.,ERR_MATCHM_G:0.,$
+          MATCHM_R:0.,ERR_MATCHM_R:0.,MATCHM_I:0.,ERR_MATCHM_I:0.,$
+          MATCHM_Z:0.,ERR_MATCHM_Z:0.,MATCHM_EXT:0.,ERR_MATCHM_EXT:0.}  ;;ext is for extra
+  tmpstr=replicate(tmpstr,n_elements(info.raj2000))
+  info=struct_addtags(info,tmpstr)     
+  
+  ;;loop and update
+  for cc=0, n_elements(catall)-1 do begin
+     
+     readsexphot, catall[cc], obj, path=pathcat
+  
+     spherematch, info.raj2000[0], info.dej2000[0], $
+                  obj.alpha_j2000[0], obj.delta_j2000[0],$
+                  1./3600., sdss_index, my_index, $
+                  distance, maxmatch=1
+     
+     ;;remove all defect and objects close to edge image (flag lt 4)
+     keep=where(obj[my_index].flags lt 4)
+     
+     if(sdssfilt[cc] eq "u") then begin       
+        info[sdss_index[keep]].matchm_u=obj[my_index[keep]].mag_auto
+        info[sdss_index[keep]].err_matchm_u=obj[my_index[keep]].magerr_auto
+     endif
+     if(sdssfilt[cc] eq "g") then begin       
+        info[sdss_index[keep]].matchm_g=obj[my_index[keep]].mag_auto
+        info[sdss_index[keep]].err_matchm_g=obj[my_index[keep]].magerr_auto
+     endif
+     if(sdssfilt[cc] eq "r") then begin       
+        info[sdss_index[keep]].matchm_r=obj[my_index[keep]].mag_auto
+        info[sdss_index[keep]].err_matchm_r=obj[my_index[keep]].magerr_auto
+     endif
+     if(sdssfilt[cc] eq "i") then begin       
+        info[sdss_index[keep]].matchm_i=obj[my_index[keep]].mag_auto
+        info[sdss_index[keep]].err_matchm_i=obj[my_index[keep]].magerr_auto
+     endif
+     if(sdssfilt[cc] eq "z") then begin       
+        info[sdss_index[keep]].matchm_z=obj[my_index[keep]].mag_auto
+        info[sdss_index[keep]].err_matchm_z=obj[my_index[keep]].magerr_auto
+     endif
+     if(sdssfilt[cc] eq "e") then begin       
+        info[sdss_index[keep]].matchm_ext=obj[my_index[keep]].mag_auto
+        info[sdss_index[keep]].err_matchm_ext=obj[my_index[keep]].magerr_auto
+     endif
+
+     splog, "Matched ", catall[cc], n_elements(sdss_index[keep])
+
+
+       
+     if keyword_set(check) then begin
+        ;;make check image
+        ;;get shift center in arcmin
+        ra_shift=(cent_ra-info[sdss_index[keep]].raj2000)*60.*$
+                 cos(info[sdss_index[keep]].dej2000*!dtor)
+        dec_shift=(cent_dec-info[sdss_index[keep]].dej2000)*60.
+        
+        ;;build array of extra circles
+        ;;flip coord and get rid zero
+        ra_shift=ra_shift
+        dec_shift=-dec_shift
+        
+        addcirc=[[ra_shift],[dec_shift]]
+        
+        
+        ;;call finding chart
+        x_fndchrt, [check+"_"+sdssfilt[cc],rstring(cent_ra),rstring(cent_dec)], /radec,$
+                   imsize=fov, /sdss, addcirc=addcirc, /deci
+     endif
+     
+
+  endfor
+  
+  
+  mwrfits, info, save, /crea
+  
+ 
+  ;;plot stuff
+  ;;plot, obj.alpha_j2000, obj.delta_j2000, psym=4, symsiz=0.8, /ynozero
+  ;;oplot, info.raj2000, info.dej2000, psym=symcat(12), color=fsc_color("red")
+  
+  
+
+end

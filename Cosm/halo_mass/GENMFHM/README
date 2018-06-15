@@ -1,0 +1,7 @@
+
+This code seems to have some problem in producing 
+the halo mass function and Mstar.
+Probably the code is fine, it is just the power spectrum 
+that is normlised to sigma8=0.74.
+
+MF2010

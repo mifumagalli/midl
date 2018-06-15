@@ -1,0 +1,330 @@
+;+
+;
+;  This is a procedure that runs source extractor with some optimized 
+;  parameters for different instruments.
+;  Currently optimal for LRIS,LBC.
+;
+;  image      --> the image to process
+;  path       --> where the image is
+;  weight     --> the weight image
+;  cat        --> the name to save the catalogue
+;  chk        --> the name to enable and save the check map
+;  seg        --> the name to enable and save the segmentation map 
+;  instr      --> the instrument 
+;  pscale     --> the instrument ps. If non set, use WCS  
+;  ascii      --> set to have a ascii catalogue
+;  zp         --> zero point to calibrate magnitudes
+;  fwhm       --> the fwhm in as
+;  outpath    --> where to write the final files  
+;  header     --> fits header
+;  plotstat   --> plot some useful statistics
+;  dual       --> in dual mode, do not append path to images, Must
+;                 provide det_img
+;  img_det    --> image used for detection only
+;  wgh_det    --> wgh used for detection
+;  viewchk    --> open the check images
+;  objsub     --> generate a obect subtracted image
+;  hot/cold   --> specialized for extended/compact sources
+;
+;-
+
+pro run_sextractor, image, path=path, instr=instr, weight=weight, $
+                    pscale=pscale, cat=cat, chk=chk, seg=seg, ascii=ascii, zp=zp, fwhm=fwhm,$
+                    outpath=outpath, header=header, plotstat=plotstat, dual=dual, img_det=img_det,$
+                    wgh_det=wgh_det, viewchk=viewchk, objsub=objsub, detect_minarea=detect_minarea, $
+                    detect_thresh=detect_thresh, deblend_mincont=deblend_mincont, toriginal=toriginal,$
+                    filter=filter
+
+  
+  ;;defult
+  if ~keyword_set(instr) then stop
+  if ~keyword_set(path) then path='./'
+  
+  ;;define generic parameters
+  sexconfig=getenv("MIDL")+"/SExtractor/default.sex"
+  sexparam=getenv("MIDL")+"/SExtractor/default.param"
+  sexconv=getenv("MIDL")+"/SExtractor/"+filter
+  sexnnw=getenv("MIDL")+"/SExtractor/default.nnw"
+  
+  splog, 'Run sextractor on ', image
+  
+  
+  ;;other general output things
+  if ~keyword_set(cat) then cat='cat_'+image
+  if keyword_set(ascii) then cattype='ASCII_HEAD' else cattype='FITS_LDAC'
+
+  ;;seg map
+  if keyword_set(chk) then check_opt=' -CHECKIMAGE_TYPE  APERTURES -CHECKIMAGE_NAME  '+chk
+  if keyword_set(seg) then check_opt=' -CHECKIMAGE_TYPE  SEGMENTATION -CHECKIMAGE_NAME  '+seg
+  if (keyword_set(seg) and keyword_set(chk)) then $
+     check_opt=' -CHECKIMAGE_TYPE  SEGMENTATION,APERTURES -CHECKIMAGE_NAME  '+outpath+seg+','+outpath+chk
+  if (not keyword_set(seg) and not keyword_set(chk)) then check_opt=' -CHECKIMAGE_TYPE  NONE '
+  
+  
+  
+;;define instrument specific
+  
+
+  
+
+
+;;lris 
+  if(instr eq 'LRIS') then begin
+     
+     ;;header info
+     texp=fxpar(header,'SC_EXP')
+     if ~keyword_set(toriginal) then toriginal=1.*fxpar(header,'TTIME')
+     side=fxpar(header,'INSTRUME')
+     gain=fxpar(header,'SC_GAIN')
+     
+     ;;fix not found
+     if (texp le 0) then texp=1
+     if (toriginal le 0) then toriginal=1 ;;this is use only for saturation and gain value 
+     if (gain le 0) then gain=1
+     
+     ;;compile options
+     if ~keyword_set(detect_minarea) then detect_minarea=25.
+     if ~keyword_set(detect_thresh) then detect_thresh=1.25
+     if ~keyword_set(deblend_mincont) then deblend_mincont=0.02
+     
+     ;;Adapted from LBT parameters. Deblending < 0.005 too aggressive
+     detect_opt=' -DETECT_TYPE CCD -DETECT_MINAREA '+rstring(detect_minarea)+' -DETECT_THRESH  '+$
+                rstring(detect_thresh)+' -ANALYSIS_THRESH 1.'
+     filter_opt=' -FILTER Y -FILTER_NAME '+sexconv+' -DEBLEND_NTHRESH 32 -DEBLEND_MINCONT '+rstring(deblend_mincont)
+     clean_opt=' -CLEAN Y -CLEAN_PARAM  1.0 -MASK_TYPE CORRECT'
+     phot_opt=' -PHOT_APERTURES  5 -PHOT_AUTOPARAMS  2.5,3.5 -PHOT_PETROPARAMS 2.0,3.5'
+     
+     if(side eq 'LRISBLUE') then saturation=rstring(64000.*1.6/toriginal) else $
+        saturation=rstring(64000./toriginal)
+     satu_opt=' -SATUR_LEVEL '+saturation
+     
+     
+     if keyword_set(zp) then zp_opt=' -MAG_ZEROPOINT '+rstring(zp) else zp_opt=' -MAG_ZEROPOINT 25.0 '
+     
+     ;;the gain should be set to the exp time for image in cnt/sec
+     gain_opt=' -GAIN '+rstring(toriginal)
+     
+     if keyword_set(pscale) then  px_opt=' -PIXEL_SCALE '+rstring(pscale) else px_opt=' -PIXEL_SCALE 0 '
+     if keyword_set(fwhm) then  see_opt=' -SEEING_FWHM '+rstring(fwhm) else see_opt=' -SEEING_FWHM 1.0'
+     
+     back_opt=' -BACK_SIZE  64 -BACK_FILTERSIZE  3 -BACKPHOTO_TYPE GLOBAL'
+     
+     
+  endif
+  
+;;esi 
+  if(instr eq 'ESI') then begin
+     
+     ;;header info
+     texp=fxpar(header,'SC_EXP')
+     if ~keyword_set(toriginal) then toriginal=1.*fxpar(header,'EXPOSURE')
+     side=fxpar(header,'INSTRUME')
+     gain=fxpar(header,'SC_GAIN')
+     
+     ;;fix not found
+     if (texp le 0) then texp=1
+     if (toriginal le 0) then toriginal=1 ;;this is use only for saturation and gain value 
+     if (gain le 0) then gain=1
+     
+     ;;compile options
+     if ~keyword_set(detect_minarea) then detect_minarea=22.
+     if ~keyword_set(detect_thresh) then detect_thresh=1.
+     if ~keyword_set(deblend_mincont) then deblend_mincont=0.02
+     
+     
+     ;;Adapted from LBT parameters. Deblending < 0.005 too aggressive
+     detect_opt=' -DETECT_TYPE CCD -DETECT_MINAREA '+rstring(detect_minarea)+' -DETECT_THRESH  '+$
+                rstring(detect_thresh)+' -ANALYSIS_THRESH 1.'
+     filter_opt=' -FILTER Y -FILTER_NAME '+sexconv+' -DEBLEND_NTHRESH 32 -DEBLEND_MINCONT '+rstring(deblend_mincont)
+     clean_opt=' -CLEAN Y -CLEAN_PARAM  1.0 -MASK_TYPE CORRECT'
+     phot_opt=' -PHOT_APERTURES  5 -PHOT_AUTOPARAMS  2.5,3.5 -PHOT_PETROPARAMS 2.0,3.5'
+     
+     saturation=rstring(64000./toriginal)
+     satu_opt=' -SATUR_LEVEL '+saturation
+     
+     if keyword_set(zp) then zp_opt=' -MAG_ZEROPOINT '+rstring(zp) else zp_opt=' -MAG_ZEROPOINT 25.0 '
+     
+     ;;the gain should be set to the exp time for image in cnt/sec
+     gain_opt=' -GAIN '+rstring(toriginal)
+     
+     if keyword_set(pscale) then  px_opt=' -PIXEL_SCALE '+rstring(pscale) else px_opt=' -PIXEL_SCALE 0 '
+     if keyword_set(fwhm) then  see_opt=' -SEEING_FWHM '+rstring(fwhm) else see_opt=' -SEEING_FWHM 1.0'
+     
+     back_opt=' -BACK_SIZE  64 -BACK_FILTERSIZE  3 -BACKPHOTO_TYPE GLOBAL'
+     
+     
+  endif
+  
+  
+;;lbt lbc camera
+  if(instr eq 'LBC') then begin
+     
+     ;;header info
+     texp=fxpar(header,'SC_EXP')
+     if ~keyword_set(toriginal) then toriginal=1.*fxpar(header,'EXPTIME')
+     side=fxpar(header,'INSTRUME')
+     gain=fxpar(header,'SC_GAIN') 
+     
+     ;;fix not found
+     if (texp le 0) then texp=1
+     if (toriginal le 0) then toriginal=1 ;;only for saturation /gain 
+     if (gain le 0) then gain=1
+     
+     
+     ;;compile options
+     if ~keyword_set(detect_minarea) then detect_minarea=15.
+     if ~keyword_set(detect_thresh) then detect_thresh=1.25
+     if ~keyword_set(deblend_mincont) then deblend_mincont=0.01
+     
+     ;;options 
+     ;;See Grazian 2009 for detection. Deblending 0.002 seems too agggressive
+     detect_opt=' -DETECT_TYPE CCD -DETECT_MINAREA '+rstring(detect_minarea)+' -DETECT_THRESH  '+rstring(detect_thresh)+$
+                ' -ANALYSIS_THRESH 1.'
+     filter_opt=' -FILTER Y -FILTER_NAME '+sexconv+' -DEBLEND_NTHRESH 32 -DEBLEND_MINCONT '+rstring(deblend_mincont)
+     clean_opt=' -CLEAN Y -CLEAN_PARAM  1.0 -MASK_TYPE CORRECT'
+     phot_opt=' -PHOT_APERTURES  5 -PHOT_AUTOPARAMS  2.5,3.5 -PHOT_PETROPARAMS 2.0,3.5'
+     
+     saturation=rstring(64000.*1.75/toriginal)
+     satu_opt=' -SATUR_LEVEL '+saturation
+     
+     if keyword_set(zp) then zp_opt=' -MAG_ZEROPOINT '+rstring(zp) else zp_opt=' -MAG_ZEROPOINT 0.0 '
+     
+     ;;set gain to exp time for e/s
+     gain_opt=' -GAIN '+rstring(toriginal)
+     
+     if keyword_set(pscale) then  px_opt=' -PIXEL_SCALE '+rstring(pscale) else px_opt=' -PIXEL_SCALE 0 '
+     if keyword_set(fwhm) then  see_opt=' -SEEING_FWHM '+rstring(fwhm) else see_opt=' -SEEING_FWHM 1.0'
+     
+     back_opt=' -BACK_SIZE  64 -BACK_FILTERSIZE  3 -BACKPHOTO_TYPE GLOBAL'
+     
+  endif
+  
+;;HST WFC3 
+  if(instr eq 'WFC3') then begin
+     
+     ;;fix not found
+     texp=1
+     if ~keyword_set(toriginal) then toriginal=5000 ;;only for saturation /gain 
+     gain=1
+     
+     
+;;
+     if keyword_set(weight) then $
+        weightopts=' -WEIGHT_TYPE MAP_WEIGHT -WEIGHT_IMAGE '+runweight+' -WEIGHT_THRESH 0' else $
+           weightopts=' -WEIGHT_TYPE NONE'
+     
+     
+     
+     ;;compile options
+     if ~keyword_set(detect_minarea) then detect_minarea=5.
+     if ~keyword_set(detect_thresh) then detect_thresh=1.5
+     if ~keyword_set(deblend_mincont) then deblend_mincont=0.1
+     
+     ;;options 
+     detect_opt=' -DETECT_TYPE CCD -DETECT_MINAREA '+rstring(detect_minarea)+' -DETECT_THRESH  '+rstring(detect_thresh)+$
+                ' -ANALYSIS_THRESH 1.'
+     filter_opt=' -FILTER Y -FILTER_NAME '+sexconv+' -DEBLEND_NTHRESH 32 -DEBLEND_MINCONT '+rstring(deblend_mincont)
+     clean_opt=' -CLEAN Y -CLEAN_PARAM  1.0 -MASK_TYPE CORRECT'
+     phot_opt=' -PHOT_APERTURES  5 -PHOT_AUTOPARAMS  2.5,3.5 -PHOT_PETROPARAMS 2.0,3.5'
+     
+     saturation=rstring(64000./toriginal)
+     satu_opt=' -SATUR_LEVEL '+saturation
+     
+     if keyword_set(zp) then zp_opt=' -MAG_ZEROPOINT '+rstring(zp) else zp_opt=' -MAG_ZEROPOINT 0.0 '
+     
+     ;;set gain to exp time for e/s
+     gain_opt=' -GAIN '+rstring(toriginal)
+     
+     if keyword_set(pscale) then  px_opt=' -PIXEL_SCALE '+rstring(pscale) else px_opt=' -PIXEL_SCALE 0 '
+     if keyword_set(fwhm) then  see_opt=' -SEEING_FWHM '+rstring(fwhm) else see_opt=' -SEEING_FWHM 1.0'
+     
+     back_opt=' -BACK_SIZE  64 -BACK_FILTERSIZE  3 -BACKPHOTO_TYPE GLOBAL'
+     
+  endif
+  
+if(instr ne 'LRIS' and instr ne 'LBC' and instr ne 'ESI' and instr ne 'WFC3') then begin
+    splog, 'Instrument not supported...'
+    return
+endif
+
+
+if keyword_set(dual) then begin 
+   
+   runimage=path+img_det+','+path+image 
+   runweight=path+wgh_det+','+path+weight
+   
+endif else begin 
+   
+   runimage=path+image
+
+endelse 
+
+ ;;define generic parameters with filenames
+  if keyword_set(dual) then  else runweight=path+weight
+ 
+
+spawn, 'sex '+runimage+' -c '+sexconfig+' -CATALOG_NAME '+outpath+cat+' -CATALOG_TYPE '+cattype+$
+        ' -PARAMETERS_NAME '+sexparam+' -STARNNW_NAME '+sexnnw+$
+        detect_opt+filter_opt+clean_opt+phot_opt+satu_opt+gain_opt+$
+        back_opt+check_opt+px_opt+see_opt+zp_opt+weightopts, /sh
+
+if keyword_set(viewchk) and keyword_set(chk) then spawn, 'ds9 -zscale '+outpath+chk+' -zoom to fit'
+
+
+if (keyword_set(plotstat) and  not keyword_set(ascii)) then begin
+    
+    fe=strpos(image,'.fits')
+    plotname='extrplot_'+strmid(image,0,fe)+'.ps'
+    m_psopen, outpath+plotname, /landscape
+            
+    if (instr eq 'LRIS' or instr eq 'LBC' or instr eq 'ESI') then object=mrdfits(cat,2,/sil)
+    
+    !p.multi=[0,3,2]
+    
+    ;;mag
+    plothist,  object.MAG_AUTO, xtitle='mag (AB)', bin=0.3, xrange=[-10,20]
+    ;;seeing
+    plothist,  object.FWHM_IMAGE, xtitle='seeing (pix)', xrange=[-1,20], bin=1.
+    ;;h.l. radius
+    plothist,  object.FLUX_RADIUS, xtitle='h.l. rad (pix)', xrange=[-1,20], bin=1.
+    ;;background
+    plothist,  object.BACKGROUND, xtitle='background (count)'
+    ;;stars
+    plothist,  object.CLASS_STAR, xtitle='stars', xrange=[-0.5,1.5], bin=0.1
+    ;;S/N
+    plothist,  1.0857/object.MAGERR_AUTO, xtitle='S/N', xrange=[-1,30], bin=1
+    
+    !p.multi=0
+    m_psclose
+    
+endif
+
+
+
+
+if keyword_set(objsub) and keyword_set(seg) then begin
+    
+    
+    fimg=mrdfits(runimage,0)
+    fseg=mrdfits(seg,0)
+    ;fwgt=mrdfits(path+weight,0)
+
+    zero=where(fseg gt 0,nzz,complement=nozero)
+
+    fimg[zero]=0
+    
+    ;rms=stddev(fimg[where(fwgt gt 0)])
+    ;noise=randomn(seed,nzz)*0.42
+    ;fimg[zero]=noise
+
+    
+    mwrfits, fimg, objsub, /crea
+
+
+
+    
+endif
+
+
+
+end

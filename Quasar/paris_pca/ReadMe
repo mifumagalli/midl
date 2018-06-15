@@ -1,0 +1,101 @@
+J/A+A/530/A50    Principal Component Analysis of QSO UV spectra   (Paris+, 2011)
+================================================================================
+A Principal Component Analysis of quasar UV spectra at z~3.
+    Paris I., Petitjean P., Rollinde E., Aubourg E., Busca N., Charlassier R.,
+    Delubac T., Hamilton J.-C., Le Goff J.-M., Palanque-Delabrouille N.,
+    Peirani S., Pichon C., Rich J., Vargas-Magana M., Yeche C.
+   <Astron. Astrophys. 530, A50 (2011)>
+   =2011A&A...530A..50P
+================================================================================
+ADC_Keywords: Models ; Spectra, ultraviolet ; QSOs
+Keywords: methods: numerical - intergalactic medium -
+          quasars: absorption lines - quasars: emission lines
+
+Abstract:
+    From a principal component analysis (PCA) of 78 z~3 high-quality
+    quasar spectra in the SDSS-DR7 we derive the principal components that
+    characterize the QSO continuum over the full available wavelength
+    range. The shape of the mean continuum is similar to that measured at
+    low-z (z~1), but the equivalent width of the emission lines is
+    larger at low redshift. We calculate the correlation between fluxes at
+    different wavelengths and find that the emission line fluxes in the
+    red part of the spectrum are correlated with those in the blue part.
+    We construct a projection matrix to predict the continuum in the
+    Lyman{alpha} forest from the red part of the spectrum.
+
+Description:
+    The first 10 Principal Components derived from a sub-sample of
+    SDSS-DR7 QSO spectra are presented over the 1020-2000A wavelength
+    range (in the restframe, xi.dat) and redwards to the Ly-alpha emission
+    (1216-2000A in the restframe, zeta.dat).
+
+    A projection matrix is also provided (proj.dat), allowing to fit a
+    quasar continuum.
+
+File Summary:
+--------------------------------------------------------------------------------
+ FileName  Lrecl  Records   Explanations
+--------------------------------------------------------------------------------
+ReadMe        80        .   This file
+xi.dat       106     1962   Principal Components over the full wavelength
+zeta.dat     106     1569   Principal Components redwards to Ly-alpha emission
+proj.dat      89       10   Projection matrix
+--------------------------------------------------------------------------------
+
+Byte-by-byte Description of file: xi.dat
+--------------------------------------------------------------------------------
+   Bytes Format Units   Label     Explanations
+--------------------------------------------------------------------------------
+   1-  7  F7.2  0.1nm   lambda    Restframe wavelength in Angstroms
+  10- 16  F7.5  ---     Flux      Mean Continuum normalized near 1280{AA}
+  18- 25  F8.5  ---     xi1       1st Principal Component {xi}_1_
+  27- 34  F8.5  ---     xi2       2nd Principal Component {xi}_2_
+  36- 43  F8.5  ---     xi3       3rd Principal Component {xi}_3_
+  45- 52  F8.5  ---     xi4       4th Principal Component {xi}_4_
+  54- 61  F8.5  ---     xi5       5th Principal Component {xi}_5_
+  63- 70  F8.5  ---     xi6       6th Principal Component {xi}_6_
+  72- 79  F8.5  ---     xi7       7th Principal Component {xi}_7_
+  81- 88  F8.5  ---     xi8       8th Principal Component {xi}_8_
+  90- 97  F8.5  ---     xi9       9th Principal Component {xi}_9_
+  99-106  F8.5  ---     xi10      10th Principal Component {xi}_10_
+--------------------------------------------------------------------------------
+
+Byte-by-byte Description of file: zeta.dat
+--------------------------------------------------------------------------------
+   Bytes Format Units   Label     Explanations
+--------------------------------------------------------------------------------
+   1-  7  F7.2  0.1nm   Wave      Restframe wavelength in Angstroms
+  10- 16  F7.5  ---     Flux      Mean Continuum normalized near 1280{AA}
+  18- 25  F8.5  ---     zeta1     1st Principal Component {zeta}_1_
+  27- 34  F8.5  ---     zeta2     2nd Principal Component {zeta}_2_
+  36- 43  F8.5  ---     zeta3     3rd Principal Component {zeta}_3_
+  45- 52  F8.5  ---     zeta4     4th Principal Component {zeta}_4_
+  54- 61  F8.5  ---     zeta5     5th Principal Component {zeta}_5_
+  63- 70  F8.5  ---     zeta6     6th Principal Component {zeta}_6_
+  72- 79  F8.5  ---     zeta7     7th Principal Component {zeta}_7_
+  81- 88  F8.5  ---     zeta8     8th Principal Component {zeta}_8_
+  90- 97  F8.5  ---     zeta9     9th Principal Component {zeta}_9_
+  99-106  F8.5  ---     zeta10    10th Principal Component {zeta}_10_
+--------------------------------------------------------------------------------
+
+Byte-by-byte Description of file: proj.dat
+--------------------------------------------------------------------------------
+   Bytes Format Units   Label     Explanations
+--------------------------------------------------------------------------------
+   1-  8  F8.5  ---     Xi1       1st column of projection matrix
+  10- 17  F8.5  ---     Xi2       2nd column of projection matrix
+  19- 26  F8.5  ---     Xi3       3rd column of projection matrix
+  28- 35  F8.5  ---     Xi4       4th column of projection matrix
+  37- 44  F8.5  ---     Xi5       5th column of projection matrix
+  46- 53  F8.5  ---     Xi6       6th column of projection matrix
+  55- 62  F8.5  ---     Xi7       7th column of projection matrix
+  64- 71  F8.5  ---     Xi8       8th column of projection matrix
+  73- 80  F8.5  ---     Xi9       9th column of projection matrix
+  82- 89  F8.5  ---     Xi10      10th column of projection matrix
+--------------------------------------------------------------------------------
+
+Acknowledgements:
+    Isabelle Paris, paris(at)iap.fr
+
+================================================================================
+(End)          Isabelle Paris [IAP], Patricia Vannier [CDS]          15-Apr-2011

@@ -1,0 +1,94 @@
+;+
+;
+; This is a procedure that takes an object structure and 
+; produces a catalogue that can be used as input in the    
+; bpz/eazy photoz code.
+;
+;
+;  objstr  -->   name of the object structure with photometry
+;  path    -->   where the object structure is
+;  eazy    -->   specific for eazy phot-z
+;  bpz     -->   specific for bpz photo-z
+;
+;
+;-
+
+
+
+pro generate_catalogue, objstr, path=path, eazy=eazy, bpz=bpz
+
+
+;;open catalogue
+obj=mrdfits(path+objstr,1)
+nfilt=n_elements(obj[0].number)
+nobj=n_elements(obj.number[0])
+
+;;open out catalogue
+if keyword_set(bpz) then outcat='bpz_'+strmid(objstr,0,strpos(objstr,'.fits'))+'.dat'
+if keyword_set(eazy) then outcat='eazy_'+strmid(objstr,0,strpos(objstr,'.fits'))+'.dat'
+
+
+;;find zspec (distinguish between 0 and z)
+obj.sdss_zspec=mk_finite(obj.sdss_zspec)
+zspec=max(obj.sdss_zspec,dimension=1)
+line=strarr(nobj)
+
+
+
+openw, lun, outcat, /get_lun
+
+for f=0, nfilt-1 do begin
+    
+    for o=0L, nobj-1 do begin
+        
+        
+        ;;feed magnitude to bpz
+        ;;(bpz makes distinction between non detection 99 and non observed -99)
+        if keyword_set(bpz) then begin
+            
+            flux=obj[o].color_magcal_cor[f]
+            errflux=obj[o].errcolor_magcal_cor[f]
+        
+            ;;set 99 for non detected
+            if(obj[o].color_sn[f] le 0 and flux eq 99) then errflux=99
+            ;;set -99 for non observed
+            if(obj[o].color_sn[f] le 0 and flux eq 0) then begin
+                errflux=-99
+                flux=-99
+            endif
+        endif
+
+
+        ;;set fluxes for eazy (exclude -99)
+        if keyword_set(eazy) then begin
+            
+            if(obj[o].color_sn[f] gt 0) then begin
+                flux=10^(-0.4D*(obj[o].color_magcal_cor[f]+48.60))
+                errflux=obj[o].errcolor_magcal_cor[f]*flux/1.0857
+            endif else begin
+                flux=-99
+                errflux=-99
+            endelse 
+            
+        endif
+
+
+        ;;generate header
+        if(o eq 0 and f eq 0) then  head='#id   z_spec   F'+obj[o].filter[f]+' E'+obj[o].filter[f]
+        if(o eq 0 and f gt 0) then  head=head+' F'+obj[o].filter[f]+' E'+obj[o].filter[f]
+        if(o eq 0 and f eq nfilt-1) then printf, lun, head
+        
+        ;;print stuff
+        if(f eq 0) then line[o]=string(obj[o].number[0],zspec[o],flux,errflux,format='(I8," ",F," ",E," ",E," ")')
+        if(f gt 0) then line[o]=line[o]+string(flux,errflux,format='(" ",E," ",E," ")') 
+        if(f eq nfilt-1) then printf, lun, line[o]   
+        
+    endfor
+    
+    splog, 'Done filter ', obj[0].filter[f]
+    
+endfor
+
+close, /all
+
+end

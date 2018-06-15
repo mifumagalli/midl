@@ -1,0 +1,12 @@
+### README  February 14 2014 by AKI
+
+### Files
+ANAigm_v1p0.f90   --- Fortran 90 code version 1.0 (February 14 2014)
+LAFcoeff.txt --- Input data file 1
+DLAcoeff.txt --- Input data file 2
+test --- test output of the transmission curves for z=1 to 7
+
+### Contact
+Akio K. Inoue
+College of General Education, Osaka Sangyo University
+akinoue@las.osaka-sandai.ac.jp

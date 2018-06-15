@@ -1,0 +1,20 @@
+;+
+;
+;
+; Use the shell command locate to find an idl procedure that contains
+; a name 
+;
+;
+;
+;
+;-
+
+
+
+pro locate, proc
+
+
+
+
+
+end

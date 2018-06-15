@@ -1,0 +1,94 @@
+;+
+;
+;
+;   Do the actual work. 
+;  
+;
+;
+;-
+
+
+
+pro scancoadd_work, filein
+
+
+  cspeed=299792.458 
+
+  ;;open the file
+  str=mrdfits(filein+'.fits',1,head)
+  nscan=n_elements(str)
+  nchan=n_elements(str[0].spectrum)
+
+  ;;get the frequency
+  iramfreq, head, freq=freq, /multi
+  
+  ;;add the frequency 
+  str = struct_addtags(str,replicate({freq:freq},nscan))
+
+  
+  ;;subtract the constant
+  str = struct_addtags(str,replicate({continuum:0.},nscan))
+  str.continuum=djs_median(str.spectrum,1)
+  str = struct_addtags(str,replicate({specsub:fltarr(nchan)},nscan))
+  str.specsub=str.spectrum - (str.continuum ## replicate(1,nchan))
+  
+  ;;add header info to structure
+  
+  dec=fxpar(head,'CRVAL3')+(1-fxpar(head,'CRPIX3'))*fxpar(head,'CDELT3')
+  ra=fxpar(head,'CRVAL2')+(1-fxpar(head,'CRPIX2'))*fxpar(head,'CDELT2')/COS(Dec) 
+  line=fxpar(head,'LINE')
+  object=fxpar(head,'OBJECT')
+  beameff=fxpar(head,'BEAMEFF')
+  forweff=fxpar(head,'FORWEFF')
+  epoch=fxpar(head,'EPOCH')
+  dateobs=fxpar(head,'DATE-OBS')
+  if(dateobs eq 0) then   dateobs=fxpar(head,'DATE-RED')
+  restfreq=fxpar(head,'RESTFREQ')/1d9
+
+  str = struct_addtags(str,replicate({ra:ra},nscan))
+  str = struct_addtags(str,replicate({dec:dec},nscan))
+  str = struct_addtags(str,replicate({line:line},nscan))
+  str = struct_addtags(str,replicate({object:object},nscan))
+  str = struct_addtags(str,replicate({beameff:beameff},nscan))
+  str = struct_addtags(str,replicate({forweff:forweff},nscan))
+  str = struct_addtags(str,replicate({epoch:epoch},nscan))
+  str = struct_addtags(str,replicate({dateobs:dateobs},nscan))
+  str = struct_addtags(str,replicate({restfreq:restfreq},nscan))
+  
+
+  ;;create velocity space, corrected for helio-velocity
+  str = struct_addtags(str,replicate({velcorr:fltarr(nchan)},nscan))
+  str.velcorr=cspeed*(restfreq-str.freq)/restfreq
+  
+  ;;find and apply heliocorrection 
+  longitude = 360. - 3.39875
+  latitude = + 37.0684
+  altitude = 2920
+  month=strmid(dateobs,5,2)
+  year=strmid(dateobs,0,4)
+  day=strmid(dateobs,8,2)
+  
+  print, dateobs,' ',year,' ',month,' ', day
+  jd=JULDAY(month,day,year,12.,0.,0.)
+
+  
+  vcorr = heliocentric(str[0].ra,str[0].dec,str[0].epoch,jd=jd,longitude=longitude,$
+                       latitude=latitude,altitude=altitude)
+  
+  print, "Heliocentric correction ", vcorr
+  str = struct_addtags(str,replicate({heliocorr:vcorr},nscan))
+  str.velcorr=str.velcorr + (str.heliocorr ## replicate(1,nchan))
+  
+
+  ;;create lambda array (in mm)
+  lambdar=2.99792458000D11/(restfreq*1d9)
+ 
+  str = struct_addtags(str,replicate({wavecor:fltarr(nchan)},nscan))
+  str.wavecor=lambdar*str.velcorr/cspeed+lambdar
+ 
+  ;;write the processed file
+  mwrfits, str, filein+'_proc.fits', head, /create
+  
+
+  
+end

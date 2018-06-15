@@ -1,0 +1,45 @@
+;+
+;
+; Extract a box from a big image, preserving the shape 
+; even if the box falls off the edges. Radius, x and y are rounded
+; to make the number of pixels odd 
+;
+; fits   --> data position in pixel 
+; xpos   --> center of the box in pixel 
+; ypos   --> center of the box in pixel 
+; radius --> radius of the box in pixel
+; double --> return a double precision array
+;-
+
+
+function extractbox, fits, xpos, ypos, radius, double=double
+
+;;get index
+xi=round(xpos)-1
+yi=round(ypos)-1
+rad=round(radius)
+
+;;make radius odd
+if(rad mod 2) ne 0 then rad=rad+1
+
+;;allocate box
+if keyword_set(double) then box=dblarr(2*rad+1,2*rad+1) else box=fltarr(2*rad+1,2*rad+1)
+
+;;identify edges
+size=size(fits)
+
+;;fill in box
+for i=-rad, rad do begin
+    for j=-rad, rad do begin
+        ;;find indexes
+        ii=xi+i
+        jj=yi+j
+        ;;fill if inside
+        if(ii gt 0 and ii lt size[1] and jj gt 0 and jj lt size[2]) then $
+          box[i+rad,j+rad]=fits[ii,jj]
+    endfor
+endfor
+
+return, box
+
+end

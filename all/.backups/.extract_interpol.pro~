@@ -1,0 +1,40 @@
+;procedura che estra un valore da una griglia interpolando
+
+;x,y sono coppai di array input
+;x0 valore di ascissa che voglio
+;y0 valore di ordinata in output
+;prec is the precision
+
+
+PRO extract_interpol, x, y, x0, y0, PREC=prec
+
+
+;check se array o variablie
+;tmp=where(x0,quanti)
+quanti=N_ELEMENTS(x0)
+
+IF(quanti EQ 1) THEN BEGIN
+;interpolate 
+y0=INTERPOL(y,x,x0)
+;warning if extrapola
+IF(x0 LT MIN(x) OR x0 GT MAX(x)) THEN print, "Warning: EXTRAPOLATION for ", x0
+;plot, x, y, line=3
+;oplot, [x0,x0], [y0,y0], psym=2
+ENDIF
+
+
+IF(quanti GT 1) THEN BEGIN
+y0=FLTARR(quanti)
+FOR i=0, quanti-1 DO BEGIN
+y0[i]=INTERPOL(y,x,x0[i])
+;warning if extrapola
+IF(x0[i] LT MIN(x) OR x0[i] GT MAX(x)) THEN print, "Warning: EXTRAPOLATION for ", x0[i]
+ENDFOR
+ENDIF
+
+
+
+END
+
+
+

@@ -1,0 +1,107 @@
+;+
+;
+; Apply an tweak the gain in LRIS images.
+; Also scale the left chip to the level of the right one. This may not
+; be optimal for the noise properties but helps to calibrate everyting
+; to the sensitivity of the right CCD which is the best one.
+;
+;
+;-
+
+
+
+pro img_lris_gain, adu_image, electron_image, outgain=outgain,$
+                   outscale=outscale, side=side, notweakgain=notweakgain, date=date
+
+  common ccdinfo, xfull,yfull,nchip,namp,biaslev,satur, goodata
+  
+  ;;define gain value as from lris page
+  if(side eq 'R') then begin  
+      ;;Current orientation of the image is 
+      ;;[VidInp3,VidInp4;VidInp1,VidInp2]
+     if(date ge '2013-01-01') then  gain_value=[1.191,1.162,1.255,1.180] else  gain_value=[1.0,1.0,1.,1.]
+  endif
+  
+  
+  if(side eq 'B') then begin
+      ;;Current orientation of the image is 
+      ;;[Amp1,2,3,4]. Before 2009-04-01 [Amp4,3,2,1]
+      if(date gt '2009-04-01') then gain_value=[1.55,1.56,1.63,1.70] else gain_value=[1.70,1.63,1.56,1.55]
+  endif
+  
+;;tweak the gain to level the two ampli in each chip
+;;--------------------------------------------------
+  
+  med_amp=fltarr(namp)
+  
+  for amp=0, namp-1 do begin
+      xs=1024*amp
+      xe=1024*(amp+1)-1
+
+      ;;consider only data regions [430:3750,740:3160] 
+      if(xs LT goodata[0]) then xs=goodata[0]
+      if(xe GT goodata[1]) then xe=goodata[1]
+      ;;try to mask bright stuff
+      djs_iterstat, adu_image[xs+100:xe-100,goodata[2]:goodata[3]]*gain_value[amp], median=medaa
+      med_amp[amp]=medaa
+  endfor
+  
+  
+  if ~keyword_set(notweakgain) then begin
+     ;;correct
+     splog, 'Tweak gain... Corr_12 :', med_amp[0]/med_amp[1]
+     splog, 'Tweak gain... Corr_34 :', med_amp[2]/med_amp[3]
+     
+     ;;check if resonable 
+     if(med_amp[0]/med_amp[1] gt 1.2 or med_amp[0]/med_amp[1] lt 0.8) then begin
+        splog, 'Variation for chips ', 1, ' bigger than 20%!'
+        splog, 'Restore gain ', gain_value[1]
+        med_amp[0]=1.
+        med_amp[1]=1.
+     endif
+     
+     if(med_amp[2]/med_amp[3] gt 1.2 or med_amp[2]/med_amp[3] lt 0.8) then begin
+        splog, 'Variation for chips ', 2, ' bigger than 20%!'
+        splog, 'Restore gain ', gain_value[3]
+        med_amp[2]=1.
+        med_amp[3]=1.
+     endif
+     
+     if(side eq 'B') then boost=1.0 else boost=1.
+     gain_value[1]=gain_value[1]*med_amp[0]/med_amp[1]
+     gain_value[3]=gain_value[3]*med_amp[2]/med_amp[3]*boost
+     
+  endif
+  
+  
+  ;;apply final gain
+  electron_image=adu_image
+  for amp=0, namp-1 do begin
+      xs=1024*amp
+      xe=1024*(amp+1)-1
+      electron_image[xs:xe,0:yfull-1]=adu_image[xs:xe,0:yfull-1]*gain_value[amp]
+      ;;consider only data regions [430:3750,740:3160] 
+      if(xs LT goodata[0]) then xs=goodata[0]
+      if(xe GT goodata[1]) then xe=goodata[1]
+      
+      djs_iterstat, electron_image[xs:xe,goodata[2]:goodata[3]], median=medaa
+      med_amp[amp]=medaa
+   endfor
+   
+
+  ;;apply scale to match the sensitivity of the two detectors 
+  ;;compute the scale of the right/left CCD
+  splog, "Scale level at the chip-gap ", med_amp[2]/med_amp[1]
+  scale_amp=[med_amp[2]/med_amp[1],med_amp[2]/med_amp[1],1.,1.]
+  for amp=0, namp-1 do begin
+     xs=1024*amp
+     xe=1024*(amp+1)-1
+     electron_image[xs:xe,0:yfull-1]=electron_image[xs:xe,0:yfull-1]*scale_amp[amp]
+  endfor
+ 
+  
+  ;;set out gain/scale
+  outgain=gain_value
+  outscale=scale_amp
+
+end

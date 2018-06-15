@@ -1,0 +1,299 @@
+;+
+;
+;  This procedure uses SExtractor, scamp and swarp to fit a WCS
+;  solution in the images and to stack a mosaic.  
+;    
+;  A combination of objectname, filter and side define all the images
+;  to stack together.
+;
+;  Instrument corrently supported: LRIS/Keck (<July 2009)
+;                                  LRIS/Keck (>July 2009)
+;                                  LBC/LBT (Septemer 2009)
+;                                  ESI/Keck  (Jan 2012)
+;
+;
+;  listfile     --> a list of fits file reduced by img_ccdproc with
+;                   info on the:
+;                   filename, filter, exptime, objectname, side 
+;  path         --> where to get the data
+;  instr        --> the instrument used
+;  noscamp      --> assumes that images are already with perfect wcs
+;                   and moves to combining them  
+;  sdss         --> if the images are cover by sdss set this flag to
+;                   use sdss as a reference. If not, uses USNO-B1 
+;  
+;
+;  scampiter    --> iteration in scamp 
+;
+;  noswarp      --> skip the combine operation
+;  
+;
+;  median       --> select this keyword to stak the images with a
+;                   median instead of a mean. This is useful to 
+;                   generate images which are free of defects and that
+;                   can be then used to create a white image for
+;                   source detection, while the photometry is done 
+;                   on mean combined images.    
+;
+; nocopy        --> set this keyword to avoid copying the images a
+;                   to the swarp procedure. Useful to re-stack 
+;                   images
+;
+;-
+
+pro img_wcsstack, filename, path=path, scampath=scampath, swarpath=swarpath, instr=instr,$ 
+                  sdss=sdss, noscamp=noscamp, noswarp=noswarp,$
+                  median=median, nocopy=nocopy, currfilt=currfilt, currobj=currobj,$
+                  deltawcs=deltawcs, filecat=filecat, cleanhead=cleanhead, side=side
+  
+  splog, 'Starting img_wcsstack at ', systime(), filename='splog.scampswarp', /append
+  
+  
+  ;;load instrument info  
+  common ccdinfo, xfull,yfull,nchip,namp,biaslev,satur, goodata
+  img_ccdinfo, instr, path, filename, side
+  
+  
+  
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;Run scamp to do astrometry 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  
+  if ~keyword_set(noscamp) then begin
+     
+     ;;convert the list of images to a list of .cat files
+     catlist=strarr(n_elements(filename))
+     for i = 0,n_elements(filename)-1 do begin
+        catlist[i]=scampath+"cat_"+filename[i]
+
+        ;;if told to do so, clean 
+        if keyword_set(cleanhead) then begin 
+
+           spawn, 'rm -f '+strmid(catlist[i],0,strlen(catlist[i])-5)+".head"
+
+        endif
+     endfor
+     
+     
+     ;;set catalogue and unique solution
+     if keyword_set(sdss) then astref_catalog = 'SDSS-R7' else astref_catalog = 'USNO-B1'
+     if keyword_set(filecat) then astref_catalog = 'FILE'
+     
+     
+     ;;set location of scamp files and general stuff
+     scampconfig=getenv("MIDL")+"/Imaging/imgredux/utility/img_default.scamp"
+     
+     
+     ;;match the filter with catalogue (instr dependent)
+     if(instr eq 'LRIS' or instr eq 'LRISr') then begin
+        if keyword_set(sdss) then begin
+           case currfilt of
+              'U': astref_band='g'  ;;for deep u band use g sloan
+              'B': astref_band='g' 
+              'V': astref_band='g' 
+              'R': astref_band='r' 
+              'I': astref_band='i' 
+           endcase
+        endif else begin
+           case  currfilt of
+              'U': astref_band='Bj' 
+              'B': astref_band='Bj' 
+              'V': astref_band='Rf' 
+              'R': astref_band='Rf' 
+              'I': astref_band='In' 
+           endcase
+        endelse
+     
+
+        ;;specify a set of 3 stability and mosaic type to be used in
+        ;;the iterations
+        scampiter=3
+        instr_mos_type=['UNCHANGED','UNCHANGED','UNCHANGED'] 
+        instr_stability=['INSTRUMENT','INSTRUMENT','INSTRUMENT']              ; stable
+        instr_position_maxerr=['0.2','0.1','0.05']                            ; arcmin 
+        instr_posang_maxerr=['3.0','1.0','0.5']                               ; deg 
+        instr_crossid_radius=['10.0','5.0','3.0']                             ; asec
+        instr_degree=['3','3','3']  
+        snthresh='10,100'            
+
+        
+     endif
+     if(instr eq 'LBC') then begin
+        ;;scampiter=3
+        if keyword_set(sdss) then begin
+           case currfilt of
+              'Us': astref_band='g' ;;for deep u band use g sloan
+              'U': astref_band='g'
+              'B': astref_band='g' 
+              'V': astref_band='g' 
+              'R': astref_band='r' 
+              'I': astref_band='i' 
+           endcase
+        endif else begin
+           case  currfilt of
+              'Us': astref_band='Bj' 
+              'U': astref_band='Bj' 
+              'B': astref_band='Bj' 
+              'V': astref_band='Rf' 
+              'R': astref_band='Rf' 
+              'I': astref_band='In' 
+           endcase
+        endelse
+        ;;specify a set of 3 stability and mosaic type to be used in
+        ;;the iterations
+        scampiter=3
+        instr_mos_type=['UNCHANGED','UNCHANGED','UNCHANGED'] 
+        instr_stability=['INSTRUMENT','INSTRUMENT','INSTRUMENT']              ; stable
+        instr_position_maxerr=['0.2','0.1','0.05']                            ; arcmin 
+        instr_posang_maxerr=['3.0','1.0','0.5']                               ; deg 
+        instr_crossid_radius=['20.0','5.0','3.0']                             ; asec
+        instr_degree=['3','3','3']  
+        snthresh='10,100'            
+        
+     endif
+     
+     if(instr eq 'ESI') then begin
+        ;;scampiter=3
+        if keyword_set(sdss) then begin
+           case currfilt of
+              'V': astref_band='g' 
+              'R': astref_band='r' 
+           endcase
+        endif else begin
+           case  currfilt of
+              'V': astref_band='Rf' 
+              'R': astref_band='Rf' 
+           endcase
+        endelse
+        ;;specify a set of 3 stability and mosaic type to be used in
+        ;;the iterations
+        scampiter=3
+        instr_mos_type=['UNCHANGED','UNCHANGED','UNCHANGED'] 
+        instr_stability=['INSTRUMENT','INSTRUMENT','INSTRUMENT']              ;;esi is stable
+        instr_position_maxerr=['0.2','0.1','0.05'] ; arcmin 
+        instr_posang_maxerr=['3.0','1.0','0.5']   ; deg 
+        instr_crossid_radius=['15.0','5.0','3.0']  ; asec
+        instr_degree=['3','3','3']  ;; if see edge effects in ESI go to 2
+        snthresh='8,100'  ;;esi needs more sources 
+        
+        
+     endif
+     
+     if(instr eq 'IMACS') then begin
+        if keyword_set(sdss) then begin
+           case currfilt of
+              'Bessell_B1': astref_band='g' 
+              'Bessell_V1': astref_band='g' 
+              'Bessell_R1': astref_band='r' 
+              'CTIO-I1': astref_band='i' 
+              'Sloan_g': astref_band='g'
+              'Sloan_r': astref_band='r'
+              'Sloan_i': astref_band='i'
+           endcase
+        endif else begin
+           case  currfilt of
+              'Bessell_B1': astref_band='Bj' 
+              'Bessell_V1': astref_band='Rf' 
+              'Bessell_R1': astref_band='Rf' 
+              'CTIO-I1': astref_band='In'
+              'Sloan_g': astref_band='Bj'
+              'Sloan_r': astref_band='Rf'
+              'Sloan_i': astref_band='In'        
+           endcase
+        endelse
+        ;;specify a set of 3 stability and mosaic type to be used in
+        ;;the iterations
+        
+        scampiter=4      
+        instr_mos_type=['UNCHANGED','UNCHANGED','UNCHANGED','UNCHANGED'] 
+        ;instr_mos_type=['FIX_FOCALPLANE','FIX_FOCALPLANE','FIX_FOCALPLANE','FIX_FOCALPLANE'] 
+        instr_stability=['INSTRUMENT','INSTRUMENT','INSTRUMENT','INSTRUMENT']       ; stable
+        instr_position_maxerr=['0.15','0.1','0.05','0.05']                          ; arcmin 
+        instr_posang_maxerr=['2.0','1.0','0.5','0.02']                              ; deg 
+        instr_crossid_radius=['10.0','8.0','5.0','4.0']                             ; asec
+        instr_degree=['3','3','3','3']  
+        snthresh='10,100'            
+
+        
+     endif
+     
+     ;;do the iterations  (for very good guess use strict parametrs)
+     for iter = 0, scampiter-1 do begin 
+     
+        ;;set current paramaters
+        degree = instr_degree[iter]
+        mosaic_type = instr_mos_type[iter]
+        position_maxerr =instr_position_maxerr[iter]           
+        posangle_maxerr =instr_posang_maxerr[iter]        
+        crossid_radius = instr_crossid_radius[iter]
+        stability_type= instr_stability[iter] 
+        
+        
+        splog, "###----------- SCAMP iteration "+rstring(iter+1)+" -------------###" 
+        
+        ;;Flip axis is disabled
+        spawn, 'scamp '+strjoin(catlist,' ')+' -c '+scampconfig+' -CHECKPLOT_DEV PS'+$
+               ' -PIXSCALE_MAXERR 1.2 -POSANGLE_MAXERR '+posangle_maxerr+' -POSITION_MAXERR '+position_maxerr+$
+               ' -ASTREF_CATALOG '+astref_catalog+' -ASTREF_BAND '+astref_band+$
+               ' -MERGEDOUTCAT_TYPE FITS_LDAC -SAVE_REFCATALOG N -REFOUT_CATPATH '+scampath+$
+               ' -DISTORT_DEGREES '+degree+' -MOSAIC_TYPE '+mosaic_type+$
+               ' -STABILITY_TYPE '+stability_type+' -CDSCLIENT_EXEC aclient_cgi -REF_SERVER vizier.cfa.harvard.edu '+$
+               ' -ASTRINSTRU_KEY SC_ID -PHOTINSTRU_KEY '+currfilt+' -NTHREADS 0 -WRITE_XML N -VERBOSE_TYPE NORMAL '+$
+               ' -CROSSID_RADIUS '+crossid_radius+' -FWHM_THRESHOLDS 2.0,100.0 -SN_THRESHOLDS '+snthresh, /sh
+        
+        ;;update header info here to iterate
+        ;;ahead overwrites wcs info
+        for nn=0, n_elements(subimage)-1 do begin
+           headcat=strmid(catlist[nn],0,strlen(catlist[nn])-5)+".head"
+           aheadcat=strmid(catlist[nn],0,strlen(catlist[nn])-5)+".ahead"
+           spawn, "cp  "+headcat+" "+aheadcat
+        endfor
+                
+     endfor ;;over scamp iterations
+   
+  endif ;;over scamp section 
+
+  if ~keyword_set(noswarp) then begin
+
+     if(instr eq 'LRIS' and side eq 'R') then begin
+        
+        splog, '**************************'
+        splog, '**************************'
+        splog, 'Deep cosmic ray rejection'
+        splog, '**************************'
+        splog, '**************************'
+        
+        ;;run swarp in median mode first without cleaning 
+        img_runswarp, swarpath=swarpath, scampath=scampath, filename=filename, instr=instr,$
+                      currobj=currobj, currfilt=currfilt, /median, outname=outname, /noclean
+                
+        ;;now try to sigma clip more aggresively 
+        spawn, 'ls '+swarpath+'*.resamp.fits', list_img 
+        spawn, 'ls '+swarpath+'*.resamp.weight.fits', list_wgt
+        img_sigmaclip, list_img, list_wgt, median=outname
+     
+        
+        ;;now combine without resempling 
+        img_runswarp, swarpath=swarpath, scampath=scampath, filename=filename, instr=instr,$
+                      currobj=currobj, currfilt=currfilt, outname=outname, /noresemp
+        
+        ;;clean resampled 
+        spawn, 'rm -f '+swarpath+'*.resamp.fits'
+        spawn, 'rm -f '+swarpath+'*.resamp.weight.fits'
+        
+     endif else begin
+        
+        ;;all in once 
+        img_runswarp, swarpath=swarpath, scampath=scampath, filename=filename, instr=instr,$
+                      currobj=currobj, currfilt=currfilt, median=median
+        
+     endelse
+     
+  endif ;;over swarp section 
+  
+  
+  splog, 'All done at ', systime(), /close
+  
+  
+end
+

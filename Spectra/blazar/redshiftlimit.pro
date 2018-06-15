@@ -1,0 +1,151 @@
+;+
+;
+;  Take a spectrum as input and run the machinary 
+;  from Sbarufatti+2006 to find the redshift limit
+;
+;
+;  spectrum/error   the spectrum and error file
+;  inflg            the spectrum inflg
+;  atmo             if set to a file with atmo ext de-redden spectrum
+;  mrnuc            set to the observed manitude in R band for the
+;                   nucleus. If not set, use spectrum.
+;  slit             two array of slit in arcsec (e.g. [0.7,5])
+;  seeing           seeing FWHM in arcsec
+;  regions          the regions used to compute min EW
+;  alpha            the blazar power law. If not set, fit from
+;                   spectrum at 3500<lambda<5500A
+;  save             output save name
+;  redshift         the redshift array used in the computation 
+;
+;-
+
+pro redshiftlimit, spectrum, error, inflg=inflg, atmo=atmo, mrnuc=mrnuc, slit=slit, $
+                   seeing=seeing, output=output, regions=regions, alpha=alpha, save=save, $
+                   redshift=redshift 
+
+  ;;------------------
+  ;;set defualt
+  ;;------------------
+
+  if ~keyword_set(inflg) then inflg=1
+  if ~keyword_set(redshift) then redshift=mkarr(0.001,0.15,0.001) 
+  
+  ;;open spec
+  if(inflg eq 1) then $
+  flux=x_readspec(spectrum,wav=wav,fil_sig=error,sig=sig,head=head)
+
+
+  ;;------------------------
+  ;;de-redden for AIRMASS
+  ;;------------------------
+
+  if keyword_set(atmo) then begin
+     
+     readcol, atmo, lambda, extinction, /silen
+     
+     am=fxpar(head,'AIRMASS')
+     magext=interpol(extinction[sort(lambda)],lambda[sort(lambda)],wav)*am
+
+     splog, 'Correct for Atm Ext at AM ', am
+     
+     ;;correct flux
+     flux=flux/10^(-0.4*magext)
+
+  end else splog, "Skip atmo extinction correction "
+  
+  ;;----------------------------------
+  ;;correct for galactic extinction
+  ;;----------------------------------
+
+  ra=fxpar(head,'RA')
+  dec=fxpar(head,'DEC')
+  splog, 'Correct for Galactic extinction at position ', ra, dec
+  ebv=ebv_dust(ra,dec,a=aext,lambda=wav)
+  flux=flux/10^(-0.4*aext)
+
+
+  ;;----------------------------------------
+  ;; Compute slit-loss correction for nucleus 
+  ;; and host galaxy
+  ;;-----------------------------------------
+
+  splog, 'Computing slit-slosses '
+  psf_model={type:'psf'}
+  slitloss, seeing, slit, model=psf_model, loss=psf_loss
+  dev_model={type:'dev',redshift:redshift,reff:10.}
+  slitloss, seeing, slit, model=dev_model, loss=dev_loss
+  
+  ;;compute redshift depedent slitloss for rho 
+  Aofz=psf_loss/dev_loss
+
+
+  ;;--------------------------------------------
+  ;;Compute rho_o from Eq  4. Sbarufatti+2006
+  ;;--------------------------------------------
+
+  splog, 'Compute host galaxy magnitude '  
+
+  ;;Mhost in Rband
+  Mrstar=-22.9 ;;+/- 0.5
+  lambda_zero=6750 ;;R band lambda in A
+  redlim_mstar, redshift, Mrstar, mstarz=mstarz
+  redlim_mstar, redshift, Mrstar+0.5, mstarz=mstarz_max
+  redlim_mstar, redshift, Mrstar-0.5, mstarz=mstarz_min
+
+  ;;Mnucleus
+  if not keyword_set(mrnuc) then begin
+     splog, 'Compute nuclear galaxy magnitude in R band'
+     getfilter, 128, lambda=fl_lambda, trans=fl_trans
+     mrnuc=spec2mag(wav,flux*10.,filtwave=fl_lambda, filt_thru=fl_trans)
+     
+     splog, 'Observed R mag ', mrnuc
+     
+     ;;subtract host contribution and apply slit loss correction 
+     distance_calculator, redshift, dlum, /lum, /wmap7, /sil 
+     mstarzobs=mstarz-5+5*alog10(1d6*dlum)+2.5*alog10(dev_loss)
+     fluxnuc=mean((10^(-0.4*mrnuc[0])-10^(-0.4*mstarzobs))*psf_loss)
+     mrnuc=-2.5*alog10(fluxnuc)
+     splog, 'Corrected nuclear R mag ', mrnuc
+   
+  endif     
+  
+  splog, 'Compute rho_0 '
+  redlim_rho, redshift, mrnuc[0], mstarz, logrho=logrho
+  redlim_rho, redshift, mrnuc[0], mstarz_max, logrho=logrho_max
+  redlim_rho, redshift, mrnuc[0], mstarz_min, logrho=logrho_min
+ 
+  ;;--------------------------------------------
+  ;;Find minimum EW using spectrum
+  ;;--------------------------------------------
+
+  redlim_minew, wav, flux, minew=minew, regions=regions
+
+  ;;--------------------------------------------
+  ;;Derive rho_0 from EW
+  ;;--------------------------------------------
+
+  ;;use CaII EW0=16A at 3934A
+  ew0=16.
+  lambda_line=3934.
+  redlim_deltaz, wav, flux, redshift, alpha=alpha, delta_z=delta_z, $
+                 lambda_zero=lambda_zero, lambda_line=lambda_line
+  
+  logrho_spec=alog10(((1+redshift)*ew0-minew)/(delta_z/Aofz*minew))
+  
+  ;;--------------------------------------------
+  ;;Set the output
+  ;;--------------------------------------------
+
+  output={redshift:redshift,logrho:logrho,logrho_max:logrho_max,logrho_min:logrho_min,$
+          mrnuc:mrnuc,delta_z:delta_z,logrho_spec:logrho_spec,alpha:alpha,minew:minew}
+  
+  mwrfits, output, save, /crea
+
+  ;;plot
+  plot, redshift, logrho
+  oplot, redshift, logrho_min, line=1
+  oplot, redshift, logrho_max, line=1
+  oplot, redshift, logrho_spec, psym=1, color=fsc_color("red")
+
+  
+end

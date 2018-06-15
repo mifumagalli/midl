@@ -1,0 +1,9 @@
+#From http://abell.as.arizona.edu/~lbtsci/Instruments/LBC/lbc_description.html
+U-   0.48
+SD   0.47
+B-   0.22
+V-   0.16
+R-   0.13
+I-   0.04
+g-   0.17
+

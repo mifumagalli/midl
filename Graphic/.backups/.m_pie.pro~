@@ -1,0 +1,318 @@
+pro m_pie, values, center=center, radius=radius, angle=angle, explode=explode, $
+	      colors=colors, outlines=outlines, title=title, labels=labels, $
+              percent=percent, format=format, numbers=numbers, filled=filled, $
+              invisible=invisible, t3d=t3d, charsize=charsize, charthick=charthick, $
+              font=font, fill_pattern=fill_pattern, steps=steps, winsize=winsize, $
+              position=position, thick=thick, shadow=shadow, solid=solid, high=high
+         
+;+
+; NAME:  
+;	PIE_PLOT
+;
+; PURPOSE:
+;	Creates a pie-graph.
+;
+; CATEGORY:
+;	Graphics.
+;
+; CALLING SEQUENCE:
+;	PIE_PLOT, VALUES
+;
+; INPUTS:
+;	Values:	A vector containing the values to be represented by the pieces
+;		of the pie. Each element in VALUES corresponds to a single piece
+;		in the output.
+;
+; KEYWORD PARAMETERS:
+;
+;	CENTER:	Gives the center position of the pie.
+;
+;	RADIUS: Is the lenght of a piece.
+;
+;	 ANGLE: Startup angle in conclusion to vertical above the center.
+;		It is given in "dec".
+;
+;      EXPLODE:	A vector (float),the same size as VALUES, containg the index, how wide the pieces
+; 		have to move out of the center (in percent of radius). 
+;
+;	COLORS:	A vector, the same size as VALUES, containing the color index
+;		to be used for each piece. If not specified, the colors are
+;		selected based on spacing the color indices as widley as possible
+;		within the available colors.
+;
+;     OUTLINES:	A vector, the same size as VALUES, containing the color index
+;		to be used for the outlines of each piece. If not specified,
+;		the colors are taken from the colors for the filled pieces.
+;
+;	 TITLE:	A string containing the main title for the pie plot.
+;
+;	LABELS:	A string array, containing one string label per piece.
+;		
+;      PERCENT:	If set, the different percentages of the pieces are also plotted.
+;
+;       FORMAT:	Contains the format for the percentage.
+;
+;      NUMBERS:	If set, the numbers of the pieces are plotted around.
+;
+;       FILLED:	If set, the pieces are filled.
+;
+;    INVISIBLE: Contains the numbers of pieces not to be shown.
+;
+;	   T3D: Creates pie in 3-D.
+;
+;     CHARSIZE:	Size of the characters used for numbers, labels, percentage.
+;
+;    CHARTHICK:	Thickness of characters.
+;
+;	  FONT:	Font for characters.
+;
+; FILL_PATTERN: Fill pattern for pieces.
+;
+;	 STEPS:	width of increment.
+;
+;      WINSIZE:	Size of the output window.
+;
+;     POSITION:	Position of output window.
+;
+;	 THICK:	Thickness of the outline.
+;
+;	SHADOW:	If shadow is set, a shadow pie is drawn under the pie (only with t3d).
+;
+;	 SOLID: If solid is set, the 3-d pie gets a solid box around the pieces
+;		(only with t3d).
+;
+;	  HIGH:	A value, that describes how high the boxes around the pieces hade to be
+;		(only with t3d).
+;
+; MODIFICATION HISTORY:
+;
+;		Created by Michael Dalbert / CreaSo in august, 1992.
+;
+;-
+
+   ;Print call & return if no parameters
+   if (n_params (d) eq 0) then begin
+      print,'pie_plot, values, center=center, radius=radius, angle=angle, $'
+      print,'          explode=explode, colors=colors, outlines=outlines, title=title, $'
+      print,'          labels=labels, /percent, format=format, /numbers, /filled, $'
+      print,'          visible=visible, /t3d, charsize=charsize, charthick=charthick, $'
+      print,'          font=font, fill_pattern=fill_pattern, steps=steps, winsize=winsize, $'
+      print,'          position=position, thick=thick, thick=thick, /shadow, /solid, $'
+      print,'          high=high'
+      return
+   endif
+
+   ; count values
+   npieces = n_elements (values)
+
+   ; Default center if not given
+   if not (keyword_set (center)) then center = [.5,.5]
+
+   ; Default radius if not given
+   if not (keyword_set (radius)) then radius = 0.35
+
+   ; Default angle if not given
+   if not (keyword_set (angle)) then angle = 0.0
+
+   ; Default explode if not given
+   if not (keyword_set (explode)) then begin
+      explode = dblarr (npieces)
+      explode = explode + .001
+   endif
+   if (n_elements (explode) lt npieces) then begin
+      expls = dblarr (npieces)
+      for i = 0, n_elements (explode) -1 do expls (i) = explode (i)
+      for i = n_elements (explode), npieces -1 do expls (i) = explode (0)
+      explode = expls
+   endif
+
+   ; Default colors in a new color table
+   r     = fltarr (2)
+   g     = fltarr (2)
+   b     = fltarr (2)
+   r (*) = 0.0 
+   g (*) = 0.0
+   b (*) = 0.0
+   pr = [ 1, 0, 1, 0, 1, 0, 1]
+   pg = [ 0, 1, 1, 0, 0, 1, 1]
+   pb = [ 0, 0, 0, 1, 1, 1, 1]
+   for i = 0, 199 do begin
+       j = 2 - i/40.0
+       r = [r,pr * j]
+       g = [g,pg * j]
+       b = [b,pb * j]   
+   endfor
+   tvlct,fix(r*122.5),fix(g*122.5),fix(b*122.5)
+   if not (keyword_set(colors))     then begin
+      colors = indgen (npieces)
+      colors = colors +2
+   endif
+   if (n_elements (colors) lt npieces) then begin
+      cols = intarr (npieces)
+      for i = 0, n_elements (colors) -1 do cols (i) = colors (i)
+      for i = n_elements (colors), npieces -1 do cols (i) = colors (0)
+      colors = cols
+   endif
+
+   ; Set default outlines
+   if not (keyword_set(outlines)) then begin
+      outlines = colors
+   endif
+   if (n_elements (outlines) lt npieces) then begin
+      outs = intarr (npieces)
+      for i = 0, n_elements (outlines) -1 do outs (i) = outlines (i)
+      for i = n_elements (outlines), npieces -1 do outs (i) = outs (0)
+      outlines = outs
+   endif
+
+   ; Look for labels
+   if (n_elements (labels) lt npieces) then begin
+      labs = strarr (npieces)
+      for i = 0, n_elements (labels) -1 do labs (i) = labels (i)
+      for i = n_elements (labels), npieces -1 do labs (i) = ''
+      labels = labs
+   endif
+
+   ; Main title
+   if not (keyword_set (title)) then title  = 'Diagramm 1'
+
+   ; Plot percentage (default is not)
+   percent = keyword_set (percent)
+
+   ; Set format default
+   if not (keyword_set (format)) then format = '(F6.2)'
+
+   ; Plot numbers (default is not)
+   numbers = keyword_set (numbers)
+
+   ; set invisible
+   if not (keyword_set (invisible)) then invisible = 0
+
+   ; Filled or not ?
+   filled = keyword_set (filled)
+
+   ; Set t3d default
+   t3d = keyword_set (t3d)
+
+   ; set window size
+   if not (keyword_set (winsize)) then winsize = 500.0   
+
+   ; set charsize
+   if not (keyword_set (charsize)) then charsize = 1.0 
+   charsize = charsize * winsize / 500.0 
+
+   ; set charthickness
+   if not (keyword_set (charthick)) then charthick = 1.0 
+   charthick = charthick * winsize / 500.0 
+
+   ; set draw thickness
+   if not (keyword_set (thick)) then thick = 1.0
+
+   ; set default font
+   if not (keyword_set (font)) then font = -1
+
+   ; set default fill pattern
+   fill_pattern = keyword_set (fill_pattern)
+
+   ; set steps 
+   if not (keyword_set (steps)) then steps = 1
+  
+   ; set position
+   if not (keyword_set (position)) then position = [300,100]
+
+   ; set shadow
+   shadow = keyword_set (shadow)   
+
+   ; set solid
+   solid = keyword_set (solid)
+
+   if not (keyword_set (high)) then high = -0.05 else high = high * (-1)
+
+   ; change angle from "dec" to "rad"
+   angle = angle * !dpi / 180.0
+
+   ; set used values
+   centerneu    = dblarr (2)
+   piecepercent = dblarr (npieces)
+   piecepercent = values / total(values)
+   pieceangle   = dblarr (npieces)
+   pieceangle   = piecepercent * 360.0
+   piecepercent = piecepercent * 100.0
+   start        = angle
+   explode      = explode * radius
+   invisible    = invisible - 1
+   if (shadow) then s = high else s = 0
+   if ( solid) then s = high
+
+   ; plot the different sectors into into z-buffer
+   ; the startpoint will be change in the sec_plot procedure for the next sectors.
+
+   ; save current device
+   savcurdev = !d.name
+
+   set_plot, 'z'
+   device, set_resolution = [winsize,winsize]
+
+   for i = 0, npieces-1 do begin
+
+      if ((where(invisible eq i))(0) eq -1) then begin
+
+         ; set the new points for text-fields
+ 
+         deltax         =  sin (start + !dpi * pieceangle(i) / 360.0)
+         deltay         =  cos (start + !dpi * pieceangle(i) / 360.0)
+         centerneu  (0) = center  (0) + deltax * explode (i)
+         centerneu  (1) = center  (1) + deltay * explode (i)
+         textx          = center  (0) + deltax * (radius + explode (i) + charsize/10)  
+         texty          = center  (1) + deltay * (radius + explode (i) + charsize/10) 
+         number         = string  (i+1,format='(I0)')
+         percentage     = strtrim (string (piecepercent (i),format=format)+'%', 1)
+
+         sec_plot, centerneu,radius,pieceangle(i),startangle=start,color=colors(i), $
+                   outline=outlines(i),filled=filled,t3d=t3d,fill_patter=fill_pattern, $
+                   steps=steps,thick=thick,z=s,solid=solid,shadow=shadow
+
+         ; plot numbers if choosen
+         if (numbers ) then begin
+            xyouts, textx,texty,number,/normal,t3d=t3d,alignment=.5,font=font, $
+                    charsize=charsize,charthick=charthick,color=8
+            texty = texty - .03 * charsize
+         endif
+
+         ; plot given labels
+         if (keyword_set (labels) and strlen (labels(i)) gt 0) then begin  
+            xyouts, textx,texty,labels (i),/normal,alignment=.5,font=font, $
+                    charsize=charsize,charthick=charthick,t3d=t3d,color=8
+            texty  = texty - .03 * charsize
+         endif
+
+         ; plot percentage if choosen
+         if (percent) then begin
+            xyouts, textx,texty,percentage,/normal,alignment=.5,font=font, $
+                    charsize=charsize,charthick=charthick,t3d=t3d,color=8
+         endif  
+
+      endif else begin
+
+         ; go to next piece
+         start = start + !dpi * pieceangle (i) /180.0
+
+      endelse
+
+   endfor
+
+   ; read image from z-buffer
+   img = tvrd ()
+
+   device, /close
+
+   set_plot, savcurdev
+
+   ;open window
+   window,0, xpos=position(0), ypos=position(1), xsize = winsize, ysize = winsize, $
+              title=title
+
+   ; show image
+   tv, img    
+
+end

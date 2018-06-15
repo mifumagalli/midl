@@ -1,0 +1,24 @@
+;+
+;
+; Build the frequency axis for a spectrum, given the header
+;
+; freq in GHz
+;
+;-
+
+
+
+
+pro iramfreq, head, freq=freq
+  
+  ;;calibrate in frequency
+  RESTFREQ=fxpar(head,"RESTFREQ")
+  CRVAL1=fxpar(head,"CRVAL1")
+  CRPIX1=fxpar(head,"CRPIX1")
+  CDELT1=fxpar(head,"CDELT1")
+  NCHANN=fxpar(head,"MAXIS1")
+  
+  INDX=findgen(NCHANN)
+  freq=(RESTFREQ+CRVAL1+(INDX-CRPIX1)*CDELT1)/1d9 ;GHz
+   
+end

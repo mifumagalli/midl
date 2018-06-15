@@ -1,0 +1,15 @@
+;procedure that for a give array compute the cumulative distribution
+
+;histo --> the input histo
+;cumulative --> the output sum of the various elements
+;bin--> the bin size for the differential
+
+
+PRO cumulative, histo, cumulative, BIN=bin
+
+dim_histo=N_ELEMENTS(histo)
+cumulative=FLTARR(dim_histo)
+FOR i=0, dim_histo-1 DO cumulative[i]=TOTAL(histo[0:i]*bin)
+
+
+END

@@ -1,0 +1,58 @@
+;+
+;
+;    This is a utility that figures out the location 
+;    and number of lines to append a new filters in 
+;    master.FILTER.RES and master.FILTER.RES.info
+;    It generated a tmp file with the data formatted.
+;
+;newfilter     the new filter file name
+;path          where the new filter is
+;lamfact       a factor to convert lambda in new filter in AA
+;str           open filter file as a structure 
+;-
+
+
+
+pro addfilter, newfilter, path=path, lamfact=lamfact, str=str
+
+if not keyword_set(path) then path='./'
+if not keyword_set(lamfact) then lamfact=1.
+
+;;read new filter
+if ~keyword_set(str) then readcol, path+newfilter, flam, ftran, /sil else begin
+   fstr=mrdfits(path+newfilter,1,/sil)
+   flam=fstr.WAVELENGTH
+   ftran=fstr.THROUGHPUT
+endelse
+
+;;read master files info
+readcol, getenv('MIDL')+'/Photz/filter/master.FILTER.RES.info', nfilt, $
+  startlines, lineinfilt, format='L,A,L', /sil
+
+;;trim semicolum
+p=strpos(startlines,':')
+startline=nfilt-nfilt
+nold=n_elements(p)
+
+for i=0, nold-1 do startline[i]=1L*strmid(startlines[i],0,p[i])
+
+newline=n_elements(flam)
+
+
+;;make an estimate of the central lambda 
+central=TSUM(flam,ftran*flam,0,newline-1)/TSUM(flam,ftran,0,newline-1)
+;;open tmp file
+openw, lun, 'tmp_filt_'+newfilter, /get_lun
+printf, lun, 'Central lambda ', central
+printf, lun, 'FILTER master info'
+printf, lun, max(nfilt)+1, ' ', 1+max(startline)+lineinfilt[nold-1],': ', newline, ' add your comments' 
+printf, lun, 'FILTER master'
+for i=0, newline-1 do printf, lun, i+1, flam[i]*lamfact,ftran[i], format='(I," ",E," ",E)'
+
+close, /all
+
+
+
+
+
+end

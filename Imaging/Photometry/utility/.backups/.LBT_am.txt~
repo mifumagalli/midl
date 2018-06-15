@@ -1,0 +1,8 @@
+#Preliminary values from  http://lbc.oa-roma.inaf.it/commissioning/standards.html
+#for U-, B-, V-. Use same value for SD, use Keck values for R- I- for now.
+U-   0.48
+SD   0.48
+B-   0.22
+V-   0.15
+R-   0.11
+I-   0.07

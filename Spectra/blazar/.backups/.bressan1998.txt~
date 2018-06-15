@@ -1,0 +1,57 @@
+3.00	17.0
+3.00	15.0 3.00	12.0 3.00	10.0 3.00	8.0 3.00	5.0
+1.00	17.0 1.00	15.0 1.00	12.0 1.00	10.0 1.00	8.0 1.00	5.0
+0.50	17.0 0.50	15.0 0.50	12.0 0.50	10.0 0.50	8.0 0.50	5.0
+0.10	17.0 0.10	15.0 0.10	12.0 0.10	10.0 0.10	8.0 0.10	5.0
+0.05	17.0 0.05	15.0 0.05	12.0 0.05	10.0 0.05	8.0 0.05	5.0
+0.01	17.0 0.01	15.0 0.01	12.0 0.01	10.0 0.01	8.0 0.01	5.0
+Mbol -24.514
+-24.597 -24.766 -24.972 -25.146 -25.560
+-23.282 -23.369 -23.542 -23.738 -23.918 -24.332
+-22.448 -22.537 -22.714 -22.901 -23.084 -23.498
+-20.362 -20.454 -20.639 -20.802 -20.994 -21.398
+-19.337 -19.433 -19.620 -19.778 -19.979 -20.359
+-17.282 -17.393 -17.580 -17.740 -17.957 -18.307
+MV -23.662
+-23.744 -23.916 -24.110 -24.315 -24.741
+-22.470 -22.556 -22.733 -22.919 -23.122 -23.551
+-21.668 -21.758 -21.940 -22.118 -22.320 -22.751
+-19.652 -19.752 -19.945 -20.110 -20.314 -20.730
+-18.675 -18.780 -18.974 -19.137 -19.344 -19.741
+-16.704 -16.819 -17.014 -17.176 -17.393 -17.768
+(U−B) (B−V) (V−R) (V−K) (1550−V)
+3.1. Main results for infall models
+Gyr,k=1,ζ=0.50,andνdecreasingfrom12forthe3 M12 galaxy down to 2.5 for the 0.05 M12 object.
+The main properties of these models are presented in Table 2 which contains the specific star formation effi- ciency ν, the age at the onset of the galactic wind, the maximum metallicity Z, the mean metallicity < Z >, and the mass MS in stars at the present epoch.
+The chemical structure of the models is represented by the normalized, cumulative distribution of the mass in stars per metallicity bin at at the present epoch (say
+For the reasons amply discussed by Bressan et al. (1994) and Tantalo et al. (1995) infall models match the region 2000 - 3500  ̊A of the spectrum of an elliptical galaxy much better than the closed-box ones. Therefore in the anal- ysis below we adopt the infall models of Tantalo et al. (1995). They successfully reproduce the CMR for Virgo and Coma galaxies by Bower et al. (1992a,b) and the UV properties of elliptical galaxies for the following parame- ters: enrichment law ∆Y/∆Z=2.5, infall time scale τ = 0.1
+0.604 0.597 0.553 0.525 0.483 0.444
+0.594 0.586 0.547 0.522 0.479 0.420
+0.573 0.566 0.531 0.507 0.465 0.396
+0.472 0.470 0.445 0.420 0.384 0.321
+0.416 0.418 0.397 0.373 0.342 0.279
+0.329 0.335 0.317 0.298 0.275 0.214
+0.999 1.001 0.981 0.968 0.937 0.911
+1.000 1.002 0.986 0.973 0.946 0.908
+0.994 0.997 0.983 0.971 0.946 0.902
+0.947 0.955 0.946 0.931 0.909 0.862
+0.915 0.928 0.922 0.908 0.887 0.836
+0.860 0.880 0.879 0.867 0.850 0.792
+0.742 0.743 0.732 0.727 0.711 0.691
+0.735 0.736 0.726 0.720 0.705 0.682
+0.729 0.729 0.720 0.713 0.699 0.674
+0.706 0.706 0.698 0.689 0.677 0.652
+0.691 0.692 0.686 0.677 0.666 0.639
+0.664 0.667 0.664 0.656 0.647 0.616
+3.330 3.339 3.347 3.375 3.339 3.348
+3.273 3.280 3.289 3.316 3.287 3.280
+3.222 3.225 3.234 3.258 3.233 3.217
+3.080 3.071 3.073 3.078 3.064 3.051
+2.977 2.969 2.970 2.970 2.963 2.941
+2.789 2.793 2.794 2.798 2.803 2.757
+2.069 2.217 2.288 2.155 2.632 6.093
+2.715 2.938 3.160 3.070 3.536 6.068
+3.396 3.792 4.595 4.712 5.096 6.019
+3.359 3.887 5.402 5.937 6.061 5.804
+3.243 3.818 5.373 5.915 5.993 5.628
+3.037 3.751 5.381 5.805 5.792 5.225

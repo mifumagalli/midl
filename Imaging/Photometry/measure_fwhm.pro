@@ -1,0 +1,127 @@
+;+
+;
+;  Take as an input a fits file from the imgredux pipeline and
+;  run sextractor few times to find the best fwhm. The final  
+;  values is stored in the header.
+;
+;  Instrument supported now: 
+;        LRIS July 2009 update
+;
+;
+;
+;   fitfile  --> the file to process
+;   fitspath --> where the file is
+;   fwhm     --> a guess to the fwhm in as. In output the final value 
+;   niter    --> maximum number of sextractor iteration
+;   diff     --> exit condition
+;   instr    --> the instrument (LRIS,LBC)
+;   clstar   --> what is used to separate stars form galaxies (defualt
+;                0.95 which seems to work the best)
+;-
+
+
+
+pro measure_fwhm, fitfile, fitspath, fwhm=fwhm, niter=niter, diff=diff, $
+                  instr=instr, clstar=clstar, check=check
+
+
+;;default
+if ~keyword_set(instr) then instr='LRIS'
+if ~keyword_set(clstar) then clstar=0.98
+if ~keyword_set(fwhm) then begin
+    ;;ground based
+    if(instr eq 'LRIS' or instr eq 'LBC' or instr eq 'ESI') then fwhm=0.8
+endif
+if ~keyword_set(niter) then niter=5
+if ~keyword_set(diff) then begin
+    if(instr eq 'LRIS' or instr eq 'LBC' or instr eq 'ESI') then diff=0.01
+endif
+
+;;check if file is zipped
+p0=strpos(fitfile,'.gz') 
+if(p0 gt 0) then begin
+    splog, 'Gunzip..'
+    spawn, 'gunzip '+fitspath+fitfile
+    file=strmid(fitfile,0,p0)
+endif else file=fitfile
+
+;;set minimum fwhm
+if(instr eq 'LRIS' or instr eq 'LBC' or instr eq 'ESI') then min_fwhm=0.3
+
+
+;;open save plot
+fp=strpos(file,'.fits')
+m_psopen, 'fwhm_'+strmid(file,0,fp)+'.ps', /land
+
+current_diff=1.
+i=0
+;;iterate
+while(i lt niter) do begin
+    
+    if (i eq 0) and keyword_set(check)then viewchk=1 else viewchk=0
+
+    header=headfits(fitspath+file)
+    ;;run sextractor
+    run_sextractor, file+'[0]', path=fitspath, instr=instr, weight=file+'[1]', $
+            fwhm=fwhm, cat='tmp_cat_HJK.fits', outpath='./', header=header, chk='tmp_chk_HJK.fits', $
+            viewchk=viewchk
+    ;;open catalogue
+    cat=mrdfits('tmp_cat_HJK.fits',2,/sil)
+    
+    ;;find good stars - round and high signal to noise
+    stars=where(cat.class_star gt clstar and cat.flags lt 4 and cat.ellipticity lt 0.15$
+    and cat.fwhm_world*3600. gt min_fwhm and 1.0857/cat.MAGERR_AUTO ge 10, nstar)
+    splog, 'Found nstar ', nstar
+
+    if(nstar gt 3) then begin
+        ;;refine the fwhm
+        old_fwhm=fwhm
+        ;;djs_iterstat, cat[stars].fwhm_world*3600., mean=fwhm, sigma=std_fwhm
+        ;;use the mode
+        fwhm=mode(cat[stars].fwhm_world*3600.,bin=diff,/min)
+        std_fwhm=stddev(cat[stars].fwhm_world*3600.)
+        splog, 'New fwhm is ', fwhm
+        current_diff=old_fwhm-fwhm
+        plothist, cat[stars].fwhm_world*3600., bin=diff, $
+          title='Iter '+rstring(i)+' FWHM '+rstring(fwhm), xrange=[0,3.]
+        oplot, [fwhm,fwhm], [-10000,10000], line=1
+        erase
+    endif else begin
+        splog, 'Not enought good stars found...'
+        ;;zip
+        if(p0 gt 0) then spawn, 'gzip '+fitspath+file
+        return
+    endelse 
+    if(abs(current_diff) le diff) then begin
+        splog, 'fwhm converged...'
+        break
+    endif
+    i++
+end
+
+m_psclose
+
+
+;;update header with fwhm value
+if(instr eq 'LRIS' or instr eq 'LBC' or instr eq 'ESI') then begin
+    splog, 'Update header '
+    ext0=mrdfits(fitspath+file,0,mainhead,/sil)
+    ext1=mrdfits(fitspath+file,1,head1,/sil)
+    ext2=mrdfits(fitspath+file,2,head2,/sil)
+    
+    sxaddpar, mainhead, 'FWHM', fwhm, 'Measure on images on '+systime()
+    sxaddpar, mainhead, 'FWHM_ERR', std_fwhm, 'Measure on images on '+systime()
+    
+    mwrfits, NULL, fitspath+file, mainhead, /create
+    mwrfits, ext1, fitspath+file, head1
+    mwrfits, ext2, fitspath+file, head2
+endif
+
+;;clean
+spawn, 'rm -f tmp_cat_HJK.fits'
+spawn, 'rm -f tmp_chk_HJK.fits'
+
+;zip
+if(p0 gt 0) then spawn, 'gzip '+fitspath+file
+    
+end

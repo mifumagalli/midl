@@ -1,0 +1,65 @@
+;This function return the EBV dust from Schlegel map.
+;If filter keyword is set, it computes the extinction according to 
+;standard extinction law.
+
+;RA      --> input RA hh:mm:ss
+;DEC     --> input DEC dd:mm:ss
+;A       --> if band keyword set, it returns the extinction 
+;BAND    --> set to a filter name to get the extinction back
+;GG      --> set to pass the rag and deg instead of RA-DEC in hh
+;LAMBDA  --> if set to a wavelenght in A, uses MW extinction 
+;            law direclty (band is overwritten)   
+
+function ebv_dust, ra, dec, a=a, band=band, gg=gg, lambda=lambda
+
+
+  ;;convert in deg-rag - galactic
+  if ~keyword_set(gg) then x_radec, ra, dec, rag, deg $
+  else begin
+     rag=ra
+     deg=dec
+  endelse
+  euler, rag, deg, l, b, 1
+  
+
+  
+  EBVdust=dust_getval(l,b,ipath=getenv('MIDL')+$
+                      '/Imaging/Photometry/dustmap/',/interp) 
+
+  ;;Use tabulated values
+  if keyword_set(band) then begin
+     ;;Optical from Cardelli, 1989
+     ;;FUV/NUV galex from Wyder et al. 2005, ApJ, 619, L15
+     ;;A(Ha)=0.6*Ab from Kennicutt, 2008    
+     ;;SDSS is computed using central wavelenght and MW extinction law
+     case band of
+        'FUV': A=8.376*EBVdust
+        'NUV': A=8.741*EBVdust
+        'U': A=4.8*EBVdust
+        'B': A=4.1*EBVdust
+        'V': A=3.1*EBVdust
+        'R': A=2.3*EBVdust
+        'I': A=1.5*EBVdust
+        'HA': A=0.6*4.1*EBVdust
+        'usdss': A=4.9*EBVdust
+        'gsdss': A=3.7*EBVdust
+        'rsdss': A=2.7*EBVdust
+        'isdss': A=2.0*EBVdust
+        'zsdss': A=1.45*EBVdust
+        else: print, 'Filter not found' 
+     endcase 
+     
+  endif
+
+  
+  ;;If frequency specified, uses MW extinction law
+  if keyword_set(lambda) then begin
+     A_v=3.1*EBVdust
+     A=dust_law(lambda,A_v)
+  endif
+
+
+
+return, EBVdust
+
+end

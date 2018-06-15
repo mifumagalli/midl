@@ -1,0 +1,29 @@
+This is a compilation of code to make wcs with iraf task ccmap in a
+easier way
+
+1) Prepare multiextension file with ccmap_multiext.pro
+   It is better to create a new folder and run the code form there
+   since it makes a lot of files 
+
+2) Run on a group of similar files (that share the same reference frame)
+   ccmap_xyradec (run on each chip separately). [iraf in xgterm]
+   Save regions as xy image.
+
+3) Run the scrip in iraf-ccmap to make the wcs fit	
+   Check epar units in degree!!!
+   Set update image yes.
+
+4) Reconstruct the multiextension files with ccmap_remulti
+	
+For the reference image,  get SDSS image via montage 
+http://hachi.ipac.caltech.edu:8080/montage/ or use dss
+
+To run the script in iraf
+task $submean=home$submean.cl
+submean
+
+In IRAF/ccdmap, the fit is interactive:
+d: delete une point
+f: fit
+q: accept the solution
+r: work on residual plane

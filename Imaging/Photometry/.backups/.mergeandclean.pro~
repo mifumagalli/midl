@@ -1,0 +1,577 @@
+
+;+
+;
+; This procedure takes SExtractor catalogues for multiple 
+; filters in one image and 
+;   
+;    - merge them, using the first as a reference 
+;    - 
+;
+;
+; catalogue  -->  list of catalogues to be merged 
+; filters    -->  list of associated filters
+; outcat     -->  name for the output catalogues 
+; path       -->  where you work
+; psplot     -->  name of the ps output file
+; ext        -->  the extension to read. 2 for lris and lbc
+; instr      -->  the instrument used
+; fwhm       -->  array of fwhm measured on the image. Used for
+;                 cleaning 
+; sdss       -->  if set, add properties from sdss to the structure
+; filtsdss   -->  a list of corresponding sdss filter to use while 
+;                 filling the structure in capitol letters (U,G,R,I,Z)
+; dual       -->  skip the metching when sextractor is run in dual mode 
+;
+;-
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;Utiliy that makes a bunch of plots
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+pro mc_create_plot, obj_str, psplot, nfilt=nfilt, filter=filter, sdss=sdss
+
+m_psopen, psplot, /land
+
+
+;;analyze the detection of the defects
+for ff=0, nfilt-1 do begin
+    
+    ;;detected in the filter
+    det=where(obj_str.DETFILT[ff] gt 0, nd)
+    ;;detected and defects
+    detdef=where(obj_str.DETFILT[ff] gt 0 and obj_str.DEFECT[ff] gt 0, ndd)
+        
+    ;;plot defects in a fwhm/mag diagram
+    plot, obj_str[det].MAG_AUTO[ff], obj_str[det].FWHM_WORLD[ff]*3600., psym=3,$
+      title='Defects (blue) in filter '+filter[ff],$
+      xtitle='mag', ytitle='FWHM (as)', xrange=[-10,5], yrange=[0,5] 
+    if(ndd gt 0) then $
+      oplot, [obj_str[detdef].MAG_AUTO[ff]], [obj_str[detdef].FWHM_WORLD[ff]*3600.], $
+      psym=1, color=50, symsize=0.5
+    
+    if keyword_set(sdss) then begin
+        ;;detected and defects, but in sdss
+        defsdss=where(obj_str.DETFILT[ff] gt 0 and obj_str.DEFECT[ff] gt 0 and obj_str.SDSS_CLASS[ff] gt 0,nds)
+      
+        ;;plot defects in ra dec plane
+        plot, obj_str[det].alpha_j2000[ff], obj_str[det].delta_j2000[ff], psym=3,$
+          title='Defects that are objects in SDSS (red) in filter '+filter[ff],$
+          xtitle='RA (J2000)', ytitle='DEC (J2000)', /ynozero
+        if(ndd gt 0) then $
+        oplot, [obj_str[detdef].alpha_j2000[ff]], [obj_str[detdef].delta_j2000[ff]],$
+          psym=1, color=50, symsize=0.5
+        if(nds gt 0) then $
+          oplot, [obj_str[defsdss].sdss_raj2000[ff]], [obj_str[defsdss].sdss_dej2000[ff]], psym=1, $
+          color=250, symsize=3
+    endif
+    
+    ;;analyse the separation star galaxy 
+    ;;detected in the filter, non defects
+    det=where(obj_str.DETFILT[ff] gt 0 and obj_str.DEFECT[ff] lt 1,dd)
+    ;;detected, non defects and stars
+    detstar=where(obj_str.DETFILT[ff] gt 0 and obj_str.DEFECT[ff] lt 1 and obj_str.OBJTYPE[ff] gt 0,ns)
+    ;;detected, non defects and galaxy
+    detgal=where(obj_str.DETFILT[ff] gt 0 and obj_str.DEFECT[ff] lt 1 and obj_str.OBJTYPE[ff] lt 1,ng)
+  
+
+    
+    ;;fwhm/mag diagram
+    plot, obj_str[det].MAG_AUTO[ff], obj_str[det].FWHM_WORLD[ff]*3600., psym=3,$
+      title='Star (red) galaxy (blue) in filter '+filter[ff],$
+      xtitle='mag', ytitle='FWHM (as)', xrange=[-10,5], yrange=[0,5] 
+    if(ns gt 0) then $
+      oplot, [obj_str[detstar].MAG_AUTO[ff]], [obj_str[detstar].FWHM_WORLD[ff]*3600.], $
+      psym=1, color=250, symsize=0.5
+    if(ng gt 0) then $
+      oplot, [obj_str[detgal].MAG_AUTO[ff]], [obj_str[detgal].FWHM_WORLD[ff]*3600.], $
+      psym=3, color=50, symsize=2.5
+    
+    if keyword_set(sdss) then begin
+        ;;detected, sdss stars
+        detstasdss=where(obj_str.DETFILT[ff] gt 0 and obj_str.DEFECT[ff] lt 1 $
+                         and obj_str.SDSS_STAR gt 0 and obj_str.OBJTYPE[ff] gt 0,nss)
+        ;;detected, sdss galaxy
+        detgalsdss=where(obj_str.DETFILT[ff] gt 0 and obj_str.DEFECT[ff] lt 1 $
+                         and obj_str.SDSS_STAR lt 1 and obj_str.OBJTYPE[ff] lt 1 $
+                         and obj_str.SDSS_CLASS[ff] gt 0,ngs)
+     
+        ;; ra dec plane
+        plot, obj_str[det].alpha_j2000[ff], obj_str[det].delta_j2000[ff], psym=3,$
+          title='Star (red)/ galaxy (blue) matched from SDSS in filter '+filter[ff],$
+          xtitle='RA (J2000)', ytitle='DEC (J2000)', /ynozero
+        if(nss gt 0) then $
+          oplot, [obj_str[detstasdss].sdss_raj2000[ff]], [obj_str[detstasdss].sdss_dej2000[ff]],$
+          psym=1, color=250, symsize=1
+        if(ngs gt 0 ) then $
+          oplot, [obj_str[detgalsdss].sdss_raj2000[ff]], [obj_str[detgalsdss].sdss_dej2000[ff]], psym=1, $
+          color=50, symsize=1
+
+        ;;now the misclassified
+        ;;detected, sdss stars, my galaxy
+        misstasdss=where(obj_str.DETFILT[ff] gt 0 and obj_str.DEFECT[ff] lt 1 $
+                         and obj_str.SDSS_STAR gt 0 and obj_str.OBJTYPE[ff] lt 1,mss)
+        ;;detected, sdss galaxy, my star
+        misgalsdss=where(obj_str.DETFILT[ff] gt 0 and obj_str.DEFECT[ff] lt 1 $
+                         and obj_str.SDSS_STAR lt 1 and obj_str.OBJTYPE[ff] gt 0 $
+                         and obj_str.SDSS_CLASS[ff] gt 0,mgs)
+   
+        plot, obj_str[det].alpha_j2000[ff], obj_str[det].delta_j2000[ff], psym=3,$
+          title='Star (red)/ galaxy (blue) misclassified (SDSS) in filter '+filter[ff],$
+          xtitle='RA (J2000)', ytitle='DEC (J2000)', /ynozero
+        if(mss gt 0) then $
+          oplot, [obj_str[misstasdss].sdss_raj2000[ff]], [obj_str[misstasdss].sdss_dej2000[ff]],$
+          psym=symcat(7), color=250, symsize=1
+        if(mgs gt 0 ) then $
+          oplot, [obj_str[misgalsdss].sdss_raj2000[ff]], [obj_str[misgalsdss].sdss_dej2000[ff]], psym=symcat(7), $
+          color=50, symsize=1
+    endif
+    
+    ;;analyse the match of sources
+    mat=where(obj_str.DETFILT[ff] gt 0 and obj_str.DEFECT[ff] lt 1 $
+              and obj_str.distmatch[ff] gt 0, mt)
+    
+    ;;plot the istogram of the distances
+    if(mt gt 0) then plothist, obj_str[mat].distmatch[ff]*3600., bin=0.01, $
+      xtitle='Distance Match (as)', title='Match sources for filter '+filter[ff]
+    
+endfor 
+
+m_psclose
+
+end
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;Utiliy that add sdss properties to the structure
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;
+;List of the SDSS stuff:
+;
+;CL 	  	   type (class) of the object (type)
+;SDSS-ID 	   (char) 	 [0-9.] SDSS object identifier
+;SpObjID 	   (char) 	Pointer to the spectrum of object, or 0 
+;zsp 	  	   (n) Spectroscopic redshift (when SpObjID>0) 
+;umag 	 mag 	   (n) Model magnitude in u filter (u) (Note 5)   (phot.mag;em.opt.U)   (PHOT_SDSS_U)
+;e_umag    	   mag 	(n) Mean error on umag (err_u)   (stat.error;phot.mag;em.opt.U)   (ERROR)
+;gmag 	mag 	   (n) Model magnitude in g filter (g) (Note 5)   (phot.mag;em.opt.B)   (PHOT_SDSS_G)
+;e_gmag 	    mag 	(n) Mean error on gmag (err_g)   (stat.error;phot.mag;em.opt.B)   (ERROR)
+;rmag 	mag 	   (n) Model magnitude in r filter (r) (Note 5)   (phot.mag;em.opt.R)   (PHOT_SDSS_R)
+;e_rmag 	   mag 	(n) Mean error on rmag (err_r)   (stat.error;phot.mag;em.opt.R)   (ERROR)
+;imag 	mag 	   (n) Model magnitude in i filter (i) (Note 5)   (phot.mag;em.opt.I)   (PHOT_SDSS_I)
+;e_imag 	   mag 	(n) Mean error on imag (err_i)   (stat.error;phot.mag;em.opt.I)   (ERROR)
+;zmag 	mag 	   (n) Model magnitude in z filter (z) (Note 5)   (phot.mag;em.opt.I)   (PHOT_SDSS_Z)
+;e_zmag 	   mag 	(n) Mean error on zmag (err_z)   (stat.error;phot.mag;em.opt.I)   (ERROR)
+;uPrad 	 arcsec 	(n) Petrosian radius in u band (petroRad_u) 
+;gPrad 	 arcsec 	(n) Petrosian radius in g band (petroMagErr_g) 
+;rPrad 	 arcsec 	(n) Petrosian radius in r band (petroMagErr_r)   
+;rs 	  	   [0,1] 0=notStar, 1=Star in r band (probPSF_r) 
+;iPrad 	 arcsec 	(n) Petrosian radius in i band (petroMagErr_i) 
+;zPrad 	 arcsec 	(n) Petrosian radius in z band (petroMagErr_z)  
+;RAJ2000 	 deg 	Right Ascension of the object (ICRS) (ra)
+;DEJ2000 	 deg 	Declination of the object (ICRS) (dec)
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+pro mc_addsdss, obj, nfilt=nfilt, filtsdss=filtsdss, rad=rad
+
+;;find the min max ra-dec
+min_ra=min(obj.ALPHA_J2000[0])
+max_ra=max(obj.ALPHA_J2000[0])
+min_dec=min(obj.DELTA_J2000[0])
+max_dec=max(obj.DELTA_J2000[0])
+
+cent_ra=0.5*(max_ra-min_ra)+min_ra
+cent_dec=0.5*(max_dec-min_dec)+min_dec
+
+edge_ra=0.5*(max_ra-min_ra)*60.
+edge_dec=0.5*(max_ra-min_ra)*60
+
+fov=2.*(edge_ra > edge_dec)
+
+splog, 'Query SDSS at ', cent_ra,cent_dec, ' in arcmin ', fov
+info=QueryVizier('II/294', [cent_ra,cent_dec], fov, /ALLCOLUMNS, /CANADA)
+
+
+;;match with sdss
+spherematch, info.raj2000, info.dej2000, $
+  obj.alpha_j2000[0], obj.delta_j2000[0], rad/3600., sdss_index, my_index, $
+  distance, maxmatch=1
+
+splog, 'SDSS objects found ', n_elements(sdss_index)
+
+
+;;loop over filters 
+for ff=0, nfilt-1 do begin
+
+    ;;common
+    obj[my_index].SDSS_CLASS[ff]=info[sdss_index].CL
+    obj[my_index].SDSS_ID[ff]=info[sdss_index].SDSS_ID
+    obj[my_index].SDSS_SPEC[ff]=info[sdss_index].SPOBJID
+    obj[my_index].SDSS_ZSPEC[ff]=info[sdss_index].ZSP
+    obj[my_index].SDSS_STAR[ff]=info[sdss_index].RS
+    obj[my_index].SDSS_RAJ2000[ff]=info[sdss_index].RAJ2000
+    obj[my_index].SDSS_DEJ2000[ff]=info[sdss_index].DEJ2000
+
+
+    ;;do filter specific
+    info_tag=tag_names(info)
+    mag_tag=filtsdss[ff]+'MAG'
+    errmag_tag='E_'+filtsdss[ff]+'MAG'
+    petr_tag=filtsdss[ff]+'PRAD'
+    
+
+    tag_ind=where(info_tag eq mag_tag)
+    obj[my_index].SDSS_MAG[ff]=info[sdss_index].(tag_ind)
+
+    tag_ind=where(info_tag eq errmag_tag)
+    obj[my_index].SDSS_ERRMAG[ff]=info[sdss_index].(tag_ind)
+    
+    tag_ind=where(info_tag eq petr_tag)
+    obj[my_index].SDSS_PRAD[ff]=info[sdss_index].(tag_ind)
+
+endfor
+
+
+
+end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;Utiliy that classify a galaxy or a star
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+pro mc_stargal, obj, nfilt=nfilt
+
+
+;;loop over the filter
+
+for ff=0, nfilt-1 do begin
+        
+    ;;the star/galaxy criterion could be refined knowing the magnitude
+    ;;This is set comparing with SDSS
+    star=where(obj.CLASS_STAR[ff] gt 0.99, nst)
+    
+    ;;update flags
+    if(nst gt 0) then obj[star].OBJTYPE[ff]=1
+
+    splog, 'Filter ', obj[0].FILTER[ff], ' found ', nst,   ' stars'
+    
+endfor
+
+
+end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;Utiliy that cleans from defects the detections
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+pro mc_clean_defect, obj, nfilt=nfilt
+
+;;loop over the filter
+
+for ff=0, nfilt-1 do begin
+
+    ;;Criteria for being rejected
+    ;;Smaller than psf 
+    ;;Highly elongated  
+    ;;Flaged as defects by sextractor (8 and above)
+        
+    ;;exclude non detection
+    small=where(obj.FWHM_WORLD[ff]*3600. lt 0.8*obj.SEEING[ff] and obj.detfilt[ff] gt 0 , nsm)
+    elong=where(obj.ELONGATION[ff] gt 7 and obj.detfilt[ff] gt 0, nelon)  
+    sexdef=where(obj.FLAGS[ff] ge 8 and obj.detfilt[ff] gt 0, nsex)  
+
+    ;;update flags
+    if(nsm gt 0) then obj[small].DEFECT[ff]=1
+    if(nelon gt 0) then obj[elong].DEFECT[ff]=1
+    if(nsex gt 0) then obj[sexdef].DEFECT[ff]=1
+    
+    splog, 'Filter ', obj[0].FILTER[ff], ' found ', nsm,   ' small defects'
+    splog, 'Filter ', obj[0].FILTER[ff], ' found ', nelon, ' elongated defects'
+    splog, 'Filter ', obj[0].FILTER[ff], ' found ', nsex,  ' sextractor defects'
+    
+endfor
+
+;;;;;;;;;;This probably works better with calibrated images
+;;;if one thing is found at the same position in > 2 
+;;;images with significant flux is probably not a defect (careful with diffraction spikes)
+;if(nfilt gt 2) then begin
+;    totdef=total(obj.defect,1)
+;    rest=where(totdef gt 2,nre)
+;    splog, 'False defects found ', nre
+;    if(nre gt 0) then obj[rest].DEFECT=replicate(0,nfilt)
+;endif 
+;;;;;;;;;;;;;;;;;
+
+end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;Utiliy that erase a new structure
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+pro mc_clean_str, str
+
+tagname=tag_names(str)
+ntag=n_elements(tagname)
+nelem=n_elements(str[0].(0))
+nrow=n_elements(str)
+
+
+for jj=0L, nrow-1 do begin
+    for nn=0, ntag-1 do begin 
+        if size(str[jj].(nn), /type) NE 7 then $
+          str[jj].(nn)=replicate(0.,nelem) else str[jj].(nn)=replicate('',nelem)
+    endfor
+endfor
+
+
+end
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;Utiliy that make the combination
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+pro mc_catcombine, ref_str, sec_str, rad=rad, nloop=nloop, filt=filt, allfil=allfil, fwhm=fwhm, dual=dual
+
+if not keyword_set(dual) then begin
+;;match the object by position within rad arcsec
+    spherematch, ref_str.alpha_j2000[0], ref_str.delta_j2000[0], $
+      sec_str.alpha_j2000, sec_str.delta_j2000, rad/3600., ref_index, sec_index, $
+      distance, maxmatch=1
+
+    nmatch=n_elements(sec_index)
+    nold=n_elements(ref_str)
+    nsect=n_elements(sec_str)
+    nnew=nsect-nmatch
+
+    splog, 'Match ', nmatch, '/',  nold, ' object '
+    splog, 'Adding ', nnew, ' new objects '
+
+endif else begin
+    sec_index=make_array(n_elements(sec_str),/index)
+    ref_index=sec_index
+    nnew=0
+    
+    ;;check
+    if(n_elements(sec_str) ne n_elements(ref_str)) then begin
+        splog, 'Something wrong with the number of sources'
+        return
+    endif
+
+endelse
+
+;;fill in structure
+sec_tagnames=tag_names(sec_str)
+ntag=n_elements(sec_tagnames)
+;;fill in id in all the fileds
+ref_str.(0)[nloop]=ref_str.(0)[0]
+
+for nn=1, ntag-1 do begin 
+    ref_str[ref_index].(nn)[nloop]=sec_str[sec_index].(nn)
+endfor
+
+;;update flags for match
+ref_str.filter[nloop]=filt
+ref_str[ref_index].detfilt[nloop]=1
+ref_str[ref_index].distmatch[nloop]=distance
+
+if(nnew gt 0) then begin
+    ;;add new detections
+    str_new=replicate(ref_str[0],nnew)
+    mc_clean_str, str_new
+    
+    sec_tagnames=tag_names(sec_str)
+    ntag=n_elements(sec_tagnames)
+    fill=0
+    nele=n_elements(str_new[0].(0))
+    ;;loop over all the elements in the old structure
+    for kk=0, nsect-1 do begin
+        newind=where(sec_index eq kk,new)
+        ;;skip is done, otherwise use
+        if(new lt 1) then begin
+            ;;fill object number
+            str_new[fill].NUMBER=replicate(1.*nold+fill+1,nele)
+            ;;fill common tag
+            for nn=1, ntag-1 do str_new[fill].(nn)[nloop]=sec_str[kk].(nn)
+            ;;update ra dec for next match
+            str_new[fill].alpha_j2000[0]=sec_str[kk].alpha_j2000
+            str_new[fill].delta_j2000[0]=sec_str[kk].delta_j2000
+            ;;update filter
+            str_new[fill].filter=allfil
+            str_new[fill].detfilt[nloop]=1
+            ;;update fwhm
+            str_new[fill].seeing=fwhm
+            ;;increment
+            fill++
+        endif
+    endfor
+    ;;append new structure
+    ref_str=[ref_str,str_new]
+endif
+
+end
+
+
+;;;;;;;;;;;;;;;;;;;;;;;
+;Intitialize structure
+;;;;;;;;;;;;;;;;;;;;;;;
+
+pro mc_init_str, ref_str, obj_str, nele, filt=filt, fwhm=fwhm
+
+;;append elements
+obj_str=add_ele_struct(ref_str,nadd=nele-1,/all)
+
+;;update tags
+nline=n_elements(ref_str)
+;;filter
+str_new=replicate(create_struct('FILTER', [filt,replicate('',nele-1)]),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;type of object 0 galaxy, 1 star (not filtered for defects)
+str_new=replicate(create_struct('OBJTYPE', replicate(0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;filter detection 1 when detected in a filter
+str_new=replicate(create_struct('DETFILT', [1,replicate(0,nele-1)]),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;distance in matching 
+str_new=replicate(create_struct('DISTMATCH', [0.0,replicate(0,nele-1)]),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;defects (1 is defects)
+str_new=replicate(create_struct('DEFECT', replicate(0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;image fwhm
+str_new=replicate(create_struct('SEEING',fwhm),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;add sdss class CL (3 galaxy, 6 star)
+str_new=replicate(create_struct('SDSS_CLASS', replicate(0L,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;add sdss id  SDSS_ID
+str_new=replicate(create_struct('SDSS_ID', replicate('',nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;add sdss spect obj SPOBJID
+str_new=replicate(create_struct('SDSS_SPEC', replicate('',nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;add sdss spect redshift ZSP
+str_new=replicate(create_struct('SDSS_ZSPEC', replicate(0D,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;add sdss mag (U,G,R,I,Z)MAG
+str_new=replicate(create_struct('SDSS_MAG', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;add sdss mag error E_(U,G,R,I,Z)MAG
+str_new=replicate(create_struct('SDSS_ERRMAG', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;add sdss petrosian radius (U,G,R,I,Z)PRAD
+str_new=replicate(create_struct('SDSS_PRAD', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;add sdss star RS
+str_new=replicate(create_struct('SDSS_STAR', replicate(0L,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;add sdss ra RAJ2000
+str_new=replicate(create_struct('SDSS_RAJ2000', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;add sdss dec DECJ2000
+str_new=replicate(create_struct('SDSS_DEJ2000', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;my tags
+;;eazy photo-z
+str_new=replicate(create_struct('EAZY_PZ', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;color flux
+str_new=replicate(create_struct('COLOR_FLUX', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;color flux error
+str_new=replicate(create_struct('ERRCOLOR_FLUX', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;total flux
+str_new=replicate(create_struct('TOT_FLUX', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;total flux error
+str_new=replicate(create_struct('ERRTOT_FLUX', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;total flux aperture corrected
+str_new=replicate(create_struct('TOT_FLUX_COR', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;total flux error aperture corrected
+str_new=replicate(create_struct('ERRTOT_FLUX_COR', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;galactic extinction
+str_new=replicate(create_struct('GALACT_A', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;flux zero point
+str_new=replicate(create_struct('ZP_MAG', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;local sky 
+str_new=replicate(create_struct('SKY_LOCAL', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;color term (color*COLOR) 
+str_new=replicate(create_struct('COLOR_TERM', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;airmass term (am*AM) 
+str_new=replicate(create_struct('AM_TERM', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;calibrated total mag, aper corr
+str_new=replicate(create_struct('TOT_MAGCAL_COR', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+;;calibrated total mag error aper corr
+str_new=replicate(create_struct('ERRTOT_MAGCAL_COR', replicate(0.0,nele)),nline)
+obj_str=struct_addtags(obj_str,str_new)
+end
+
+;;;;;;;;;;;;;;;;;
+;;Main procedure
+;;;;;;;;;;;;;;;;;
+
+pro mergeandclean, catalogue, filter=filter, fwhm=fwhm, outcat=outcat, path=path, $
+                   psplot=psplot, ext=ext, instr=instr, sdss=sdss, filtsdss=filtsdss, dual=dual
+
+if not keyword_set(path) then path='./'
+if not keyword_set(ext) then ext=2
+if not keyword_set(instr) then instr='LRIS'
+
+if(instr eq 'LRIS') then radmat=0.3 ;;match in 0.3" arcsec for ground based
+
+nfilt=n_elements(filter)
+
+;;load reference and initialise new structure
+splog, 'Initialize new structure'
+ref_str=mrdfits(path+catalogue[0],ext,/sil)
+mc_init_str, ref_str, obj_str, nfilt, filt=filter[0], fwhm=fwhm
+
+;;start compiling the match 
+for ff=1, nfilt-1 do begin
+    
+    splog, 'Merge ', catalogue[ff]
+    mat_str=mrdfits(path+catalogue[ff],ext,/sil)
+    
+    ;;merge
+    mc_catcombine, obj_str, mat_str, rad=radmat, nloop=ff,$
+      filt=filter[ff], allfil=filter, fwhm=fwhm, dual=dual
+    
+endfor
+
+splog, 'Total objects ', n_elements(obj_str)
+
+;;do the cleaning part
+mc_clean_defect, obj_str, nfilt=nfilt
+
+;;classify as galaxy/star
+mc_stargal, obj_str, nfilt=nfilt
+
+;;if in sdss obtain additional information
+if keyword_set(sdss) then mc_addsdss, obj_str, nfilt=nfilt, filtsdss=filtsdss, rad=radmat
+
+;;save final catalogue
+splog, 'Write final structure'
+mwrfits, obj_str, path+outcat, /create
+
+;;make a full set of plot to check that what you did is decent
+if keyword_set(psplot) then mc_create_plot, obj_str, psplot, nfilt=nfilt, filter=filter, sdss=sdss
+
+
+end

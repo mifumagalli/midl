@@ -1,0 +1,6 @@
+function ez2, z
+common cos, omm,oml,h,sigma8,signorm,rho0
+ez2= oml +(1.-oml-omm)*(1.+z)^2 +omm*(1.+z)^3
+return, ez2
+end
+

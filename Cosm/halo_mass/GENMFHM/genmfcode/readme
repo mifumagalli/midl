@@ -1,0 +1,88 @@
+
+Oct. 23 2006  REVISION 1.01: 
+CHANGES: replaced previous version of lcdm.pow, with new good version.
+            Due to a bug, previous version of lcdm.pow had ns=1.0, 
+            when it was meant to have ns=0.951.
+            Code itself is unchanged.
+
+            
+
+
+genmf.f
+    Code to generate mass functions of
+                Reed, Bower, Frenk, Jenkins, and Theuns 2007, MNRAS, 374, 2
+                  (arXiv:astro-ph/0607150) 
+	  	based on high resolution numerical dark matter simulations.
+                 code framework is based on Adrian Jenkins massfn.f	
+          - Darren Reed 6/2006  Institute for Computational Cosmology 
+				Durham University, England
+
+Please cite Reed, Bower, Frenk, Jenkins, and Theuns 2007, MNRAS, 374, 2
+if you use this code.  
+Note: Code refers to this mass function as Reed et al 2006, but final 
+publication date is 2007.
+
+
+to compile: gmake genmf
+
+code expects to find an input power spectrum file called "lcdm.pow"
+ which has 2 columns  k  P(k)   in Mpc/h units
+ a sample "lcdm.pow" file is included with a 
+ WMAP 3year cosmology power spectrum made with CMBFAST
+      assuming omega_m = .24, omega_lambda=0.76, sigma_8=0.74, n_s=0.951,
+      extrapolated to very small k with slope of k**-1, 
+      exptrapolated to and very high k with slope k**-3 
+
+ The transfer function used to make this power psectrum is a density weighted
+ linear combination of the dark matter and baryon transfer function at z=0.  
+ To avoid a small kink at high k, a z=399 transfer function is spliced
+ onto the z=0 transfer function for k > 1 h/Mpc.
+
+
+
+example to run: 
+./genmf 0.23831863389003569 0.76168136610996429 .74 0. z0.mf 0
+
+ for WMAP 3 year cosmology
+(omega_m = .238, omega_lambda=0.752, sigma_8=0.74, n_s=0.951
+omega_b=0.0418, h=73km/s/mpc):
+
+
+
+
+
+ Usage: genfn omega_m om_lam sig_8_z0 z outfile opt
+ 
+ omega_m  =  The value of Omega_m at redshift zero.
+ om_lam   =  The value of Omega_lambda at redshift zero.
+ sig_8_z0 =  The norm of the power spectrum at z=0
+ z        =  The redshift for which the mass function
+                                          is required.
+ outfile  =  Name of the output file written by code
+ opt = Option for mass function 
+ opt = 0 -Reed et al 2006, with n_eff dependence
+ opt = 1 -Reed et al 2006, without n_eff dependence
+ opt = 2 -Sheth-Tormen
+ opt = 3 -Jenkins et al 2001
+ opt = 4 -Warren et al 2005
+ opt = 5 -Reed et al 2003
+ opt = 6 -Press-Schechter
+   
+ default input powspec is file called lcdm.pow
+    2 column file, k[h/Mpc]  P(k)[Mpc**3/h**3]
+ modify func powspec for other power spectrum choices
+   
+ All units in (comoving) Mpc/h and Msun/h
+   
+ Output is 7 columns
+ log10m(Msun/h) dn/dlog10m  n(>m)  ln(1/sigma(m,z)) f  sigma(m,z)  n_eff
+ where n is the comoving abundance per cubic Mpc/h
+ n_eff is the effective power spectrum slope
+  n_eff approx.= 6 dln(1/sigma(m))/dlnm -3
+
+
+basic idl example script to run and plot dn/dlogm:
+start idl, then
+@idlexample.pro
+
+

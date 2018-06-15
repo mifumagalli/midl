@@ -1,0 +1,179 @@
+;+
+;
+;
+;This procedure prepares plan files for img_ccdproc
+;Telescope supported: LRIS/Keck (CCD < June 2009, CCD > June 2009)
+;                     LBC/LBT   ( > September 2009)
+;                     ESI/Keck  ( > Jan 2012)
+;                     FEINC/SAO ( > Jul 2012)
+;                     IMACS/Magella (> May 2013) 
+;
+;INPUT:
+;
+;INSTR --> the instrument you uses (LRIS, LBC, ESI, FEINC)
+;PATH  --> path to a folder where images are (Defaut ../Raw/)
+;LOG   --> name of the log
+;
+;OUTPUT:
+;
+;LOGFILE from header. Check this, as it requires editing.  
+;
+;
+;-
+
+PRO img_makeplan,  PATH=path, LOG=log, INSTR=INSTR
+  
+  
+  ;;set default
+  
+  if ~keyword_set(PATH) then path='../Raw/'
+  if ~keyword_set(INSTR) then instr='LRIS'
+  if ~keyword_set(LOG) then log='obsplan.log'
+  
+  ;;get the list of images
+  if(INSTR eq "IMACS") then spawn, "ls "+path+"*c1.fits*", list $
+  else spawn, "ls "+path+"*.fits*", list
+  
+  num=n_elements(list)
+  splog, 'Found ', num, ' images.'
+  splog, 'Getting header information'
+  
+ ;;open write
+  openw, lun, log, /get_lun
+  
+  for i=0, num-1 do begin
+     
+     ;;open header
+     header=headfits(list[i],exten=0) 
+     
+     ;;now do instrument list
+     if(INSTR eq "LRIS" or INSTR eq "LRISr") then begin
+        ;;find which side 
+        side=sxpar(header,"INSTRUME")
+        if(rstring(side) eq "LRISBLUE") then begin
+           ;;blue side
+           filt=sxpar(header,"BLUFILT")
+           sid='B'
+           ;;check if filter in grism 
+           if(rstring(filt) eq 'clear') then begin
+              ;;list filters mounted in grism 
+              if(rstring(sxpar(header,"GRISNAME")) eq 'NB4970') then filt='NB4970'
+           endif
+        endif else begin
+           ;;red side
+           filt=sxpar(header,"REDFILT")
+           sid='R'
+        endelse  
+        time=sxpar(header,"TTIME")
+        obj=sxpar(header,"OBJECT",/silent)
+        
+        ;;define types 
+        type=''
+        if(time gt 120) then type='sci'
+        
+        ;;get rid of slit in and no-mirror 
+        exclude=0
+        if(rstring(sxpar(header,"SLITNAME")) ne 'direct') then exclude=1
+        ;;end of lris
+     endif
+     if(INSTR eq "LBC") then begin
+        ;;find which side 
+        side=sxpar(header,"INSTRUME")
+        if(rstring(side) eq "LBC_BLUE") then sid='B' else sid='R'
+        
+        ;;get other
+        filt=sxpar(header,"FILTER")
+        
+        ;;fix filters 
+        if(filt eq 'SDT_Uspec') then filt = 'Us'        
+        if(filt eq 'U-BESSEL') then filt = 'U'        
+        if(filt eq 'B-BESSEL') then filt = 'B'        
+        if(filt eq 'Y-FAN') then filt = 'Y'        
+        if(filt eq 'I-BESSEL') then filt = 'I'        
+        if(filt eq 'V-BESSEL') then filt = 'V'        
+        if(filt eq 'R-BESSEL') then filt = 'R'        
+        
+        time=sxpar(header,"EXPTIME")
+        
+        obj=sxpar(header,"OBJECT",/silent)
+        
+        if(obj eq 'SkyFlat') then type='fla' else type=''
+        exclude=0                    ;;nothing to exclude
+     endif 
+     if(INSTR eq "ESI") then begin
+        ;;find which side 
+        sid="R"  ;;only one side
+        ;;get other
+        filt=sxpar(header,"DWFILNAM")
+        time=sxpar(header,"EXPOSURE")
+        obj=sxpar(header,"OBJECT",/silent)
+        ;;decide type
+        if(STRPOS(sxpar(header,"SHUTSTAT"),'open') ge 0) then begin 
+           if(STRPOS(sxpar(header,"TARGNAME"),'DOME') ge 0 or STRPOS(sxpar(header,"TARGNAME"),'sky') ge 0) $
+           then type='fla' else type='sci'
+        endif else type='bia'
+        ;;check to exclude spectra  
+        if(strtrim(sxpar(header,"SLMSKNAM")) eq "Clear_I") then exclude=0 else exclude=1 ;;rem ECH
+     endif
+     if(INSTR eq "FEINC") then begin
+        ;;find which side 
+        sid="R"  ;;only one side
+        ;;get other
+        filt=sxpar(header,"FILTER")
+        time=sxpar(header,"EXPTIME")
+        obj=sxpar(header,"OBJECT",/silent)
+        type=sxpar(header,"IMAGETYP") 
+        exclude=0 ;;nothing to exclude
+     endif
+     if(INSTR eq "IMACS") then begin
+        
+        ;;find which side 
+        sid="R"  ;;only one side
+        ;;get other
+        filt=sxpar(header,"FILTER")
+        time=sxpar(header,"EXPTIME")
+        obj=sxpar(header,"OBJECT",/silent)
+        am=sxpar(header,"AIRMASS",/silent)
+        gain=sxpar(header,"CCDGAIN",/silent)
+
+        if(gain ne "High") then stop 
+
+        ;;decide type
+        if(time lt 1) then type='bia'
+        if(am eq 1 and time ge 1) then type='fla'
+        if(time ge 1 and am gt 1) then type='sci'
+        ;;check to exclude spectra  
+        if(strtrim(sxpar(header,"SLITMASK")) eq "f/4-Imaging" and filt ne "Spectroscopic1") then exclude=0 else exclude=1 ;;rem spectra 
+        
+     endif
+     if(INSTR ne "ESI" and INSTR ne "LBC" and INSTR ne "LRIS" and INSTR ne "FEINC" and INSTR ne "LRISr" and INSTR ne "IMACS") then begin
+        splog, "Instrument ", INSTR, " not supported!"
+        return
+     endif
+     
+     
+     ;;if not specified, assign image type
+     if(type eq "") then begin
+        ;;flag bias
+        if(time lt 1) then type='bia'
+        ;;guess flat (this will flag the std, too)
+        if(time lt 3 and time gt 0) then type='fla'
+        ;;guess object
+        if(time gt 3) then type='sci'
+     endif
+     
+     ;;trim path from string
+     name=strmid(list[i],strlen(path))
+     
+     ;;print info
+     if(exclude eq 0) then $
+             printf, lun, name, filt, $
+                     time, obj, type, sid, 0, $
+                     format='(A-30,A-10,F8.2," ",A-20,A-5,A-3,I3)'     
+     
+  endfor
+  
+  free_lun, lun
+  splog, 'Created log ', logfile
+  
+end

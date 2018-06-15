@@ -1,0 +1,38 @@
+;;example of using ks2d.pro
+
+
+;try out 2 identical distributions
+
+x1=randomn(seed,1000)
+y1=randomn(seed,1000)
+
+x2=randomn(seed,2000)
+y2=randomn(seed,2000)
+
+print, 'probability drawn from same parent distribution=',$
+     ks2d(x1,y1,x2,y2)
+print, '(should be close to 1, or at least not near zero)'
+
+print,''
+
+
+;make a subtle shift in one of the distributions
+
+print, 'probability drawn from same parent distribution=',$
+     ks2d(x1+.1,y1,x2,y2)
+print, '(should be a little less than last value)'
+
+print,''
+
+
+;now see how they compare when distributions have different spreads
+x2=randomn(seed,2000)*5.
+y2=randomn(seed,2000)*5.
+
+print, 'probability drawn from same parent distribution=',$
+     ks2d(x1,y1,x2,y2)
+print, '(should be much less than 1)'
+
+
+end
+

@@ -1,0 +1,135 @@
+;+
+;
+; This procedure take a science image, a segmenation map  
+; from sexctractor, an object structure, a noise model,  
+; and compute aperture photometry 
+;
+;
+; scimap    the fits file of the science assumed in e-/s
+; segmap    the segmenation map
+; objstr    object structure with sext parameters
+; weight    extract using a weight/mask map to mask out bad pixels
+; optimal   extract using optimal model (which one??)
+;           In this case, weight are used only to flag bad pixels.
+; noise     a noise model [sigma1,alpha,beta]. For uncorrelated noise
+;           use alpha=1,beta=1. sigma=sigma_1*alpha*n_pix^beta 
+; texp      the effective exposure time (used for error estimate)
+; zp        photometric zero point
+; minrad    minimum kron radius 
+;
+; magout     output   
+; magerrout  output
+; localsky   output
+;+
+
+
+pro getmagnitude, scimap, segmap, objstr, noise=noise, texp=texp, weight=weight, $
+                  optimal=optimal, zp=zp, magout=final_mag, magerrout=final_magerr, $
+                  localsky=localsky, minrad=minrad
+            
+
+;;set some default
+if ~keyword_set(noise) then noise=[1.,1.,1.]
+if ~keyword_set(texp) then texp=1.
+if ~keyword_set(zp) then zp=25.
+
+;;get image info
+xsize=n_elements(scimap[*,0])
+ysize=n_elements(scimap[0,*])
+
+;;make equal good pixel image if not provided
+if ~keyword_set(weight) then weight=scimap-scimap+1.
+
+;;get the number of object and make space
+nobj=n_elements(objstr.x_image)
+final_mag=fltarr(nobj)
+final_magerr=fltarr(nobj)
+localsky=fltarr(nobj)
+
+splog, 'Compute mag for ', nobj, ' objects'
+
+
+;;loop over all the objects
+for oj=0, nobj-1 do begin
+    ;;for weighted extraction
+    if ~keyword_set(optimal) then begin
+
+        ;;set ellipse parameters 
+        xc=objstr[oj].x_image
+        yc=objstr[oj].y_image
+        ;;kron aperture   NOT SURE IF THIS IS THE CORRECT KRON APERTURE!!!!!
+        pos_ang=objstr[oj].theta_image+90
+        a_ell=objstr[oj].kron_radius*objstr[oj].a_image
+        b_ell=objstr[oj].kron_radius*objstr[oj].b_image
+        
+        ;;limit to min radius (take into account kron_radius=0 for
+        ;;flux<0)
+        if(a_ell lt minrad*objstr[oj].a_image or b_ell lt minrad*objstr[oj].b_image) then begin
+            a_ell=minrad*objstr[oj].a_image
+            b_ell=minrad*objstr[oj].b_image
+        endif
+        
+        dist_ellipse, ellimage, [xsize,ysize], xc, yc, a_ell/b_ell, pos_ang
+        
+        ;;evaluate local sky value  MAYBE CAN BE IMPROVED
+        ;;take elliptical annulus, reject bad pixels and source pixels 
+        skypix=where(ellimage gt 5*a_ell and ellimage lt 15*a_ell and weight ne 0. and segmap lt 1., nsky)
+        if(nsky gt 20) then begin
+            ;;evaluate sky
+            sky, scimap[skypix], skyval, skysig, /SILENT
+        endif else skyval=objstr[oj].background
+        localsky[oj]=skyval
+
+        ;;Find pixels for the object. Mask pixels that are flaged as
+        ;;another object or bad
+        goodpix=where(ellimage le a_ell and weight ne 0. and (segmap lt 1 or segmap eq oj+1), ngood)
+        
+        ;;flux and error
+        if(ngood gt 1) then begin
+            flux=total(scimap[goodpix])-skyval*ngood
+            err_flux=sqrt(noise[0]^2*noise[1]^2*ngood^noise[2]+flux/texp)
+            
+            if(flux gt 0.) then begin
+                ;;good flux
+                final_mag[oj]=-2.5*alog10(flux)+zp 
+                final_magerr[oj]=1.0857*err_flux/flux
+            endif else begin
+                ;;negative flux
+                final_mag[oj]=99
+                final_magerr[oj]=99
+            endelse
+        endif else begin
+            ;;no good pixels
+            final_mag[oj]=99
+            final_magerr[oj]=99
+        endelse
+
+    endif else begin
+        splog, 'Optimal extraction not here yet'
+        stop
+    endelse
+
+endfor
+
+end
+;    X_IMAGE         FLOAT           3160.65
+;    Y_IMAGE         FLOAT           602.105
+;    X_WORLD         DOUBLE           3159.6535
+;    Y_WORLD         DOUBLE           601.10485
+;    ALPHA_J2000     DOUBLE           0.0000000
+;    DELTA_J2000     DOUBLE           0.0000000
+;    MAG_AUTO        FLOAT           14.7585
+;    MAGERR_AUTO     FLOAT       0.000261615
+;    FLUX_RADIUS     FLOAT           14.9259
+;    KRON_RADIUS     FLOAT           3.50000
+;    THETA_IMAGE     FLOAT          -27.9020
+;    A_IMAGE         FLOAT           25.8252
+;    B_IMAGE         FLOAT           11.8492
+;    ELONGATION      FLOAT           2.17949
+;    ELLIPTICITY     FLOAT          0.541177
+;    BACKGROUND      FLOAT        0.00537325
+;    THRESHOLD       FLOAT        0.00144266
+;    FWHM_IMAGE      FLOAT           105.019
+;    CLASS_STAR      FLOAT          0.844398
+;    ID              INT              1
+;    TYPE            STRING    'O'

@@ -1,0 +1,33 @@
+;+
+;
+; Make a BB radiation file that can be input in the Meudon PDR code.
+;  
+;
+; temperature   the T of the BB  
+; name          the name of the output model 
+; lambda        the min-max lambda to generate the BB (o elsewhere)
+;
+;
+;-
+
+pro make_input_bb, temp, name=name, lambda=lambda
+
+
+  if ~keyword_set(lambda) then lambda=[800,10000]
+
+  ;;define constants cgs
+  h=6.6260755D-27               ;erg s
+  k=1.380658D-16                ;erg k-1
+  c=2.99792458D10               ;cm s-1
+
+
+  ;;derive lambda array
+  lam_arr=mkarr(lambda[0],lambda[1],1.)
+  
+  intensity=2.*h*nu^3/c^2/(exp(h*nu/(k*temp))-1)
+  
+
+
+
+
+end

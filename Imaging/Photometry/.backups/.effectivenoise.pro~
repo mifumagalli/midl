@@ -1,0 +1,154 @@
+;+
+;
+; Given an image and a corrisponding SExtractor segmentation map, this procedure
+; measure the empirical noise on the sky subtraced image taking into account the  
+; correlated noise.
+;
+; imgfits     the image to process
+; segmap      the segmentation map from sextractor
+; gain        the gain needed to get image in electron (default is 1)
+; exptime     the exposure time to get the image /per second (default is 1)
+; ext         the extention to open (default 0) 
+; plot        make a ps plot of the noise with the 'plot' name
+; mask        set to a good pixel mask to flag weird regions
+; wghext      extension where the weight map is (optional)
+; outmodel    return a 3 element array with noise properties [S1,alpha,beta]
+;
+;-
+
+pro effectivenoise, imgfits, segmap, gain=gain, exptime=exptime,$
+                    ext=ext, plot=plot, mask=mask, wghext=wghext, outmodel=outmodel
+                    
+
+;;make default
+if ~keyword_set(gain) then gain=1.
+if ~keyword_set(exptime) then exptime=1.
+if ~keyword_set(ext) then ext=0
+
+;;read sci fits and make it in e/s
+fits=mrdfits(imgfits,ext,head,/sil)
+fits=temporary(fits*gain/exptime)
+;;read segmentaion map
+segm=mrdfits(segmap,/sil)
+
+;;mask all the pixel with objects and put to 1 the
+;;segmap in order to get the effective area right
+obj=where(segm gt 0,nsg)
+if(nsg gt 0) then begin
+    fits[obj]=0.
+    segm[obj]=1.
+endif
+
+if keyword_set(mask) then begin
+    msk=where(mask eq 0)
+    fits[msk]=0.
+    segm[msk]=1.
+endif
+
+if keyword_set(wghext) then begin
+    wei=mrdfits(imgfits,wghext,/sil)
+    wgh=where(wei eq 0)
+    fits[wgh]=0.
+    segm[wgh]=1.
+endif
+
+
+stop
+
+;;get image info and set minimum maximum apertures
+xsize=(size(fits))[1]
+ysize=(size(fits))[2]
+
+minaper=2.  
+maxaper=20. 
+
+;;set a list of aperture sizes
+aper_size=mkarr(minaper,maxaper,2.)
+nsize=n_elements(aper_size)
+naper=1000
+
+;;to store data
+bkg=fltarr(nsize,naper)
+meanrms=fltarr(nsize)
+
+
+if keyword_set(plot) then m_psopen, plot, /land
+
+;;get naper aperture for each size, avoiding edges
+for sz=0, nsize-1 do begin
+    ;;for each size get a bunch of random apertures
+    ;;avoid those which overlap too much with targets
+    ap=0
+    limit=0
+    while(ap lt naper) do begin
+        ;;pick a random integer center, but avoid the edges
+        xc=fix(make_random(1,aper_size[sz]+1,xsize-aper_size[sz])-1)
+        yc=fix(make_random(1,aper_size[sz]+1,ysize-aper_size[sz])-1)
+        
+        
+        ;;get the pixel in the aperture
+        pval=xpix_circ(xc[0],yc[0],aper_size[sz],maxx=xsize,maxy=ysize,COUNT=pix_ap)
+        ;;find index from position
+        indx_img=fits-fits
+        populate_image, indx_img, reform(pval[0,*]) , reform(pval[1,*]), weights=replicate(1.,pix_ap)
+        pval=where(indx_img eq 1)
+        undefine, indx_img
+
+        sci_ap=total(fits[pval])
+        seg_ap=total(segm[pval])
+      
+        ;;If aperture overlaps with too many objects, do not use
+        if(seg_ap lt 1) then begin
+            ;;get value
+            bkg[sz,ap]=sci_ap
+            ;;increment
+            ap=ap+1
+        endif
+        limit++
+        if(limit gt 10000) then begin
+            splog, 'Your image is crowded... Use ', ap, ' apertures' 
+            break
+        endif
+    endwhile
+
+    ;;get rms of one size
+    meanrms[sz]=stddev(reform(bkg[sz,*]))
+    splog, 'Aperture ', aper_size[sz], ' has rms ', meanrms[sz]
+    if keyword_set(plot) then begin
+        plothist, reform(bkg[sz,*]), bin=meanrms[sz]/5., xtitle='Flux (e-/s)', ytitle='Number',$
+          title=Textoidl('R_{app}'+string(aper_size[sz],format='(F4.1)')+' rms '+string(meanrms[sz],format='(F7.4)'))
+        erase
+    endif
+endfor
+
+
+;;get the rms in 1 pixel across the entire images
+sigma1=stddev(fits[where(segm lt 1)]) ;;this has the wgh image already inside
+aper_size=[1.,aper_size]
+meanrms=[sigma1,meanrms]
+
+;;fit the model
+logrms=alog10(meanrms)
+logsize=alog10(aper_size)
+
+
+model=linfit(logsize,logrms,YFIT=myfit) 
+alpha=10^model[0]/sigma1
+splog, 'sigma_1', sigma1
+splog, 'alpha', alpha
+splog, 'beta', model[1]
+
+outmodel=[sigma1,alpha,model[1]]
+
+
+if keyword_set(plot) then begin
+;;now fit model of empirical noise
+    plot, aper_size, meanrms, xtitle=Textoidl('R_{app} (pix)'), $
+      ytitle='rms (e/s)', /ylog, psym=symcat(16), $model[1]
+      title='S1= '+string(sigma1)+' a= '+string(alpha)+' beta= '+string(model[1])
+    oplot, aper_size, 10^myfit
+    m_psclose
+endif
+   
+ 
+end

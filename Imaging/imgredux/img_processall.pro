@@ -1,0 +1,161 @@
+;+
+;     
+; Wrapper for img_wcsstack. Takes the log file with the grops and
+; spawn jobs to img_wcsstack 
+;
+;-
+
+pro img_processall, plan, _extra=extra,  path=path, instr=instr, deltawcs=deltawcs,$
+                    cleanhead=cleanhead, noprep=noprep, noswarp=noswarp, noscamp=noscamp
+  
+  if ~keyword_set(instr) then instr='LRIS'
+  if ~keyword_set(path) then path='./proc/'
+  
+  ;;create subfolder in path that will contain a lot of junk 
+  ;;accumulated by all the steps
+  spawn, 'mkdir -p '+'scamp'
+  scampath='scamp/'
+  spawn, 'mkdir -p '+'swarp'
+  swarpath='swarp/'
+  
+  ;;define generic parameters
+  sexconfig=getenv("MIDL")+"/Imaging/imgredux/utility/img_default.sex"
+  sexparam=getenv("MIDL")+"/Imaging/imgredux/utility/img_default_sex.param"
+  sexconv=getenv("MIDL")+"/Imaging/imgredux/utility/img_default_sex.conv"
+  sexnnw=getenv("MIDL")+"/Imaging/imgredux/utility/img_default_sex.nnw"
+  
+  ;;do the grouping 
+  readcol, plan, fitsname, filter, texp, objname, type, side, groupid, format='A,A,F,A,A,A,I'
+  
+  ;;create processed name 
+  filename=strarr(n_elements(fitsname))
+  for i=0, n_elements(fitsname)-1 do $
+          filename[i]=strmid(fitsname[i],0,strpos(fitsname[i],".fits"))+"_redux.fits"
+  
+  ;;find individual groups 
+  allgroups=find_different(groupid)
+  
+  ;;load instrument info
+  common ccdinfo, xfull,yfull,nchip,namp,biaslev,satur, goodata
+  img_ccdinfo, instr, path, filename[where(type eq 'sci')], side[where(type eq 'sci')]
+  
+  for gg=0, n_elements(allgroups)-1 do begin
+     ;;exclude zero 
+     if(allgroups[gg] gt 0) then begin
+        
+        ;;find elements of a group 
+        ingroup=where(groupid eq allgroups[gg])
+        
+        if ~keyword_set(noprep) then begin
+           ;;establish coarse wcs for a group of images
+           for img=0, n_elements(ingroup)-1 do begin
+              
+           ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+           ;;;;            Prepare the images       ;;;;
+           ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+              
+              ;;input the images 
+              sci=mk_finite(mrdfits(path+filename[ingroup[img]],0,header,/sil))
+              wgt=mk_finite(mrdfits(path+filename[ingroup[img]],1,/sil))
+              date=fxpar(header,'DATE')
+              
+              ;;do first easy wcs 
+              img_prescamp, sci, wgt, header, instr=instr,$
+                            filter=filter[ingroup[img]], object=objname[ingroup[img]], $
+                            filename=filename[ingroup[img]], path=scampath, idgroup=allgroups[gg], $
+                            nophot=nophot, side=side[ingroup[img]], $
+                            sdss=sdss, deltawcs=deltawcs       
+              undefine, sci, wgt
+                                          
+           ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+           ;;;;         Run source etxractor        ;;;;
+           ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+              
+              ;;define generic parameters with filenames
+              
+              ;;there seems to be a bug in sex, so turn off weight for now
+              weightopts=' -WEIGHT_TYPE NONE -WEIGHT_IMAGE '+scampath+"wgt_"+filename[ingroup[img]]
+              cat=scampath+"cat_"+filename[ingroup[img]]
+              bgimage=scampath+"check_"+filename[ingroup[img]]
+              image=scampath+"sci_"+filename[ingroup[img]]
+              
+              ;;scale saturation for gain and exptime (instrument specific)
+              if(instr eq 'LRIS') then begin
+                 ;;set guess for zp
+                 gzp='27.6'
+                 if(date gt '2013-01-01') then begin 
+                    if(side[ingroup[img]] eq 'R') then gain=1.2 else gain = 1.6
+                 endif else begin
+                    if(side[ingroup[img]] eq 'R') then gain=1. else gain = 1.6
+                 endelse
+                 pixscale=0.135
+              endif
+              if(instr eq 'LRISr') then begin
+                 ;;set guess for zp
+                 gzp='27.6'
+                 if(side[ingroup[img]] eq 'R') then gain=2.0 else stop
+                 pixscale=0.211
+              endif
+              if(instr eq 'LBC') then begin
+                 ;;set guess for zp
+                 gzp='27.5'
+                 gain=2.0
+                 pixscale=0.224
+              endif
+              if(instr eq 'ESI') then begin
+                 ;;set guess for zp
+                 gzp='28.5'
+                 gain=1.29
+                 pixscale=0.156
+              endif
+              if(instr eq 'IMACS') then begin
+                 ;;set guess for zp
+                 gzp='27.5'
+                 gain=0.9
+                 pixscale=0.111
+              endif
+        
+              ;;set saturation 
+              saturation=satur/texp[ingroup[img]]*gain
+              
+              ;;for LBC red, lower saturation 
+              if(instr eq 'LBC' and side[ingroup[img]] eq 'R') then saturation=saturation*0.85
+
+              ;;use quite aggressive threshold as I care mostly about
+              ;;bright stars at this point
+              
+              spawn, 'sex '+image+' -c '+sexconfig+' -CATALOG_NAME '+cat+' -CATALOG_TYPE FITS_LDAC'+weightopts+$
+                     ' -PARAMETERS_NAME '+sexparam+' -DETECT_THRESH 3 -PIXEL_SCALE '+rstring(pixscale)+$
+                     ' -ANALYSIS_THRESH 3 '+' -DETECT_MINAREA 5 '+$
+                     ' -FILTER_NAME '+sexconv+' -STARNNW_NAME '+sexnnw+' -CHECKIMAGE_TYPE NONE -CHECKIMAGE_NAME '+$
+                     bgimage+' -VERBOSE_TYPE NORMAL  -DEBLEND_MINCONT 0.01 -BACK_TYPE AUTO'+$
+                     ' -SATUR_LEVEL '+rstring(saturation)+' -MAG_ZEROPOINT '+gzp+' -GAIN '+rstring(texp[ingroup[img]]), /sh
+              
+           endfor
+           
+        endif ;;no prep
+
+        ;;now run the scamp+swarp pair on a group 
+        subfilts=find_different(filter[ingroup])
+        
+        for sff=0, n_elements(subfilts)-1 do begin
+           
+           procimg=filename[ingroup]
+           procimg=procimg[where(filter[ingroup] eq subfilts[sff])]
+           procname=objname[ingroup]
+           procname=procname[where(filter[ingroup] eq subfilts[sff])]
+           procside=side[ingroup]
+           procside=procside[where(filter[ingroup] eq subfilts[sff])]
+                     
+           img_wcsstack, procimg, path=path, scampath=scampath, swarpath=swarpath, instr=instr, _extra=extra, $
+                         currfilt=subfilts[sff], currobj=procname[0], cleanhead=cleanhead, $
+                         side=procside[0], noswarp=noswarp, noscamp=noscamp
+           
+        endfor
+        
+     endif
+     
+  endfor
+  
+end
+

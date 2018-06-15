@@ -1,0 +1,31 @@
+;+
+;
+; Define some of my favorite colors
+; And then move to fsc_color
+;
+;-
+
+function mikicolor, name
+
+
+case name of 
+    'm_darkblue': begin
+        clr = [50,45,77]
+        thiscolor=clr[0] + clr[1]*2L^8 + clr[2]*2L^16
+    end
+    'm_sage': begin
+        clr = [122,132,70]
+        thiscolor=clr[0] + clr[1]*2L^8 + clr[2]*2L^16
+    end
+
+
+
+else: thiscolor=fsc_color(name)
+endcase
+
+
+
+
+return, thiscolor
+
+end

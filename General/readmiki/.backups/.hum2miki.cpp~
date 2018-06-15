@@ -1,0 +1,36 @@
+
+
+//include standard libraries
+#include <sstream>
+#include <iostream> 
+#include <cstdio>
+#include <cstdlib>
+#include <cmath>
+#include <string.h> 
+#include <fstream>
+#include <vector>
+#include <stddef.h>
+#include <stdio.h>
+#include <time.h>
+#include <algorithm>
+
+using namespace std;
+
+int main(int argc, char *argv[]){
+  
+  //get input
+  string phrase=argv[1];
+  
+  //get lenght 
+  int lenght=phrase.size();
+  
+  
+  cout<<lenght<<endl;
+
+  //loop and print miki
+  for(int i=0;i<lenght;i++) cout<<(int)phrase[i]<<endl;
+  
+  
+
+  exit(0);
+}

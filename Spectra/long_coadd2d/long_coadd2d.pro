@@ -1,0 +1,673 @@
+;+
+;PURPOSE
+;	to coadd 2d-spectra previously reduced using Low-redux pipeline
+;SYNTAX
+;	long_coadd2d, sci_arr, trace[, scales,/flux2d, pixscale=pixscale, 
+;			/extract, sensfuncfile=sensfuncfile, /onedflux, 
+;			slitwidth=slitwidth, wvimg=wvimg, /xwave,  path=path, 
+;			/integer,/cr_reject, /quiet, /nohelio,
+;			outputname=outputname, splogname=splogname,
+;			stacked_mask=stacked_mask, weights=weights,
+;			 /no_fwhm_weight, handmask=handmask, median=median]
+;INPUTS
+;   sci_array: 	array of names of sci-file outputs from long_reduce
+;
+;	trace: 	an array of objids corresponding the trace that we want to use
+;		for the same object across different sci_array
+;		files. The traces are counted sarting from 0. 
+;
+;	scales: scalar value by which to scale each image [nimages]
+;
+;KEYWORDS
+;   handmask    must be a an array of [nx, ny, nimages] with values of 1 for
+;		all pixels you don't want masked and 0 for all that you do.
+;		This is intended if you find a cosmic ray that the codes
+;		couldn't find and you want to force it to be masked
+;	
+;   noskysub	set to prevent skysubtraction
+;   median      if set, images are combined with a simple median (to
+;               get rid of the cosmic rays)
+;
+;_____________________________2D Fluxing___________________________
+;      flux2d:	if set then will apply sensitivity function to give 
+;		a fully fluxed 2-dimensional spectrum. The following keywords
+;		must be set: sensfuncfile, wvimg, and pixscale. Slitwidth 
+;		should be defined if the spectrum's slit was not 1"
+;	        Output will be a 2 extension file [flux2d***.fits]
+;		Extension 0:fluxed image
+;		Extention 1:fluxed invsere variance
+;		Extension 2:2d sensitivity function). 
+;		Fluxed image=sensivitiy function x unfluxed image
+;		Units are [10^-17 erg/s/cm^2/Ang/arcsec^2]
+;		{see tutorial below}
+;
+;    pixscale:	the arcseconds/pixel of your spectrum. must be set for /flux2d
+;		make SURE that you include binning correctly
+;	
+;   slitwidth:	width of your slit [default to 1"] only used for /flux2d	
+;
+;sensfuncfile:	the location of the sensitivity function output from
+;		long_sensfunc()... Give entire path (DOES NOT inherit
+;		path keyword)
+;_____________________________1D Fluxing________________________
+;    onedflux:	set to apply sensitivity function to give a fluxed 
+;		one-dimensional spectrum. The following keywords must 
+;		be set: sensfuncfile,wvimg,extract. 
+;		Output [flux1d***.fits'] has the following tags that 
+;		have been properly fluxed
+;		       WAVE_OPT: wavelength array for optimal extraction
+;		       FLUX_OPT: flux array for optimal extraction
+;		       IVAR_OPT: inverse variance array for optimal extraction
+;		       WAVE_BOX: wavelength array for boxcar extraction
+;	 	       FLUX_BOX: flux array for boxcar extraction
+;		       IVAR_BOX: inverse variance array for boxcar extraction
+;		flux is in units of [10^-17 erg/s/cm^2/Ang]	
+;		{see tutorial below}
+;_______________________________Extraction_________________________________
+;     extract:	set to perform an extraction of your given object on 
+;		the coadded image [extr***.fits], requires wvimg to be set
+;		{see tutorial below}
+;________________________________General_________________________
+;	wvimg: 	name of the wavelength solution image given by low-redux. 
+;		If set then will output the correct wavelength image in output
+;		file
+;
+;	xwave:  {See NOTES below} Set this if x-axis is wavelength (dispersion)
+;		axis of the image
+;
+;     nohelio:	if set then will not apply mean heliocentric correction to 
+;		output wavelength 2d image. Note that at the current time
+;		only one heliocentric correction is applied: the average
+;		one. This means that there might be errors on the
+;		heliocentric correction for observations spanning large
+;		temporal ranges
+;
+;  	 path: 	if set then specifies path to science files. If not set assumes
+;		science files are in the folder where program is run.
+;
+;     integer: 	set if you only want to apply integer shifts. This avoids
+;		problem with correlated noise and interpolation at the 
+;		price of adding a fractional pixel bias in wavelength and
+;		spatial position. This is your choice based on your science!
+;
+;   cr_reject: 	to run a cut of 10 sigma (sigma here in the sense of error 
+;		bars not standard deviation) above median of images for every
+;		pixel... only  meaningful for more than 2 images. 
+;		You will want to have this set if you have more 
+;		than 2 exposures.
+;
+;     weights:  weight to applied to each image by default we use the 
+;               median inverse variance of each image (where inverse
+;               varinace not equal 0)
+;
+;no_fwhm_weight:If set then will not weight by the inverse of the FWHM of the
+;		Low-redux extraction of the given trace. If you want to 
+;		manually apply your own such weight simply multiply your
+;		weights value from the weights keyword
+;		
+;stacked_mask:	an image which is 1 if that pixel is flagged by a mask
+;		in any of the 3 images and 0 everywhere else
+;
+;	quiet: 	set to suppress printed out status outputs
+;	
+;  outputname:	name of output file [default to "coadd-"+first file name]
+;
+;   splogname:	name of files for output of splog file for writing out
+;		[default to "coadd2d***.log"]
+;
+;OUTPUT
+;	the main output is written to a file which has the 
+;	following data structure [outputname or coadd2d***.fits]:
+;extension-
+;0: ___________________________________________
+;	the stacked image
+;1:____________________________________________
+; 	the inverse variance (masked pixels have inverse variance
+;	equal to 0)
+;2:____________________________________________
+;	 a structure with information about traces and extractions
+;   From LOW-REDUX-
+;		  OBJID: the object ID of object in image 
+;		 SLITID: the slit that the object was found on 
+;	   FLX_SHFT_WAV: flexure shift found in the wavelength direction in
+;			 numbers of pixels
+;	   FLX_SHFT_SPA: flexure shift found in spatial direction in numbers
+;			 of pixels
+;   From COADD2D-
+;	        SCIFILE: name of the science file that extraction comes from
+;  	       XPOS_MED: median x-position of trace	   	    
+;	   FLUX_OPT_MED: median flux from optimal extraction
+;	         XSHIFT: the shift in x direction applied (in pixels)
+;		 YSHIFT: the shift in the y direction applied (in pixels)
+;
+;3:_____________________________________________
+;	 the stacked mask:
+;		an image which is 1 if that pixel is flagged by a mask
+;               in any of the 3 images and 0 everywhere else
+;
+;4:____________________________________________
+;	 if wvimg keyword is given, this extension will be written
+;		 	and will contain the  correct 2-dimensional 
+;			wavelength solution for the image. Given in vaccum
+;			wavelenths
+;EXAMPLES
+;	long_coadd2d, [sci-b090723_0116.fits.gz,sci-b090723_0117.fits.gz, $
+;		sci-b090723_0120.fits.gz], [3, 3, 4], /cr_reject	
+;
+;TUTORIAL
+;	Running this code without the flux2d, extract, or onedflux keywords 
+;	will simply give you as an output a multi-extension fits file 
+;	containing the stacked 2 dimensional science images with appropriate
+;	inverse variance images. There are two main modes to run this coadding
+;	    1 - "default": This applies non-integer shifts to correctly line
+;		up the spectrum at the subpixel level. This adds correlated
+;		noise and can spread out unmasked cosmic rays
+;	    2 - "integer": To use this second mode set the integer keyword.
+;		This mode will only apply integer shifts. This prevents 
+;		correlated noise but will introduce biases in velocity and
+;		spatial extent.
+;	The choice of which mode you choose is yours and should be based on
+;	your science. If you have more than 2 images. You should almost always
+;	set the cr_reject keyword. This uses the information of the multiple
+;	images to help deal with cosmic rays. Your first image in your sci_arr
+;	list should be your best image as it is a reference for all the others.
+;	 {See notes about xwave below}.
+;       The coaddition is as follows:
+;           coadd[x, y]=total(scale_i*F_i*weight_i)/
+;                            total(weight_i)
+;       With masking pixels. The weight for each pixel is defined as
+;       follows:
+;                weight_i=median(inverse_variance of image i)/
+;                             median(FWHM of extraction)
+; 
+;
+;	If you set the flux2d keyword, the code will output an additional fits
+;	file which will contain a fluxed image such that every pixel gives
+;	the flux/arcsecond^2. In order to run this you need to
+;	give the additional keywords: wvimg, pixscale, slitwidth, and 
+;	sensfuncfile. The sensfuncfile is the output of Low-Redux's 
+;	long_sensfunc(). If slitwidth is not set then it will be 
+;	its default value of 1". This process relies on the assumption that
+;	the sensitivity function of the CCD does not vary much in the spatial
+;	direction. A good check on this is to look at flat fields and check
+;	to see if your counts vary wildly in your region of interest.
+;
+;	If you set the extract keyword then the code will perform 1d
+;	extractions. To see details of the tags from the output see the 
+;	documentation for long_2dextract.pro. This requires wvimg to be set.
+;
+;	If you want your 1d extractions from your extract keyword
+;	to be fluxed you can set the onedflux keyword. This requires the 
+;	following keywords to be set/defined: wvimg, extract, sensfuncfile.
+;
+;NOTES
+;	-this is optimized for one trace at a time
+;	
+;	-this program currently only applies a single heliocentric correction
+;	 based on the average of all the images
+;	
+;	-this procedure does not explicitly force flux conservation however
+;	 tests suggest that it is accurate at the 5 hundreths of magnitude
+;	 level at small scales and sub-thousandths of magnitudes for larger
+;	 scales
+;
+;	-this is not a 1% level accuracy program. Various interpolations
+;	 and extrapolations are made in order to get an answer however 
+;	 some of them are not strictly formally correct. We do the best
+;	 that can be done. This is especially true for the flux2d keyword
+;
+;	-This program assumes that the image has the spatial direction
+;	 along the x-axis and the wavelength (dispersion) direction along 
+;	 y-axis
+;	
+;		_________________
+;
+;		|		|	^
+;               |               |	|	
+;               |               |	|
+;               |               |	wavelength 
+;               |               |	|
+;               |______________ |	V
+;
+;		   <--Spatial->
+;
+;	 if this is not the case then you will need to set the xwave keyword.
+;	 This transposes the images and wavelengths such that the output
+;	 is in the x-spatial y-wavelength orientation
+;
+;
+;Written by Robert da Silva & Michele Fumagalli, 9-26-09, UCSC
+;Add median; MF (Apr, 2010) 
+;-
+
+pro long_coadd2d, sci_arr, trace, scales, path=path, $
+                  integer=integer, cr_reject=cr_reject, $
+                  quiet=quiet, wvimg=wvimg, outputname=outputname, $
+                  splogname=splogname, xwave=xwave, nohelio=nohelio, $
+                  stacked_mask=stacked_mask, flux2d=flux2d, $
+                  extract=extract, sensfuncfile=sensfuncfile, $
+		  onedflux=onedflux, pixscale=pixscale, slitwidth=slitwidth $
+		  ,no_fwhm_weight=no_fwhm_weight, noskysub=noskysub, $
+		  kludge_skysubtract=kludge_skysubtract, handmask=handmask, median=median
+
+
+;----
+; Checking inputs
+  if n_params() EQ 0 then begin
+     print, 'long_coadd2d,sci_arr, trace[, scales,/flux2d, /extract,	'
+     print, '	    sensfuncfile=sensfuncfile, /onedflux,	'
+     print, '	    wvimg=wvimg, /xwave,  path=path,		'
+     print, '	    /integer,/cr_reject, /quiet, /nohelio,	'
+     print, '	    outputname=outputname, splogname=splogname, '
+     print, '	    stacked_mask=stacked_mask, pixscale=pixscale ]'
+     return
+  endif
+ 
+ 
+  Nexp=N_ELEMENTS(sci_arr)
+
+  if keyword_set(flux2d) AND NOT keyword_set(sensfuncfile) then begin
+     splog, 'ERROR: Sensitivity Function location must be specified via  sensfuncfile keyword if /flux2d is set'
+     return
+  endif
+
+  if keyword_set(flux2d) AND NOT keyword_set(pixscale) then begin
+     splog, 'ERROR: if /flux2d is set then you must specify pixscale)'
+  endif
+  if (keyword_set(flux2d) OR keyword_set(onedflux)) AND NOT keyword_set(wvimg) $
+	then begin
+splog, 'ERROR: In order to flux you must specify wvimg keyword'
+return
+endif
+
+  if keyword_set(onedflux) AND NOT keyword_set(sensfuncfile) then begin
+     splog, 'ERROR: Sensitivity Fucntion location must be specified via  sensfuncfile keyword if /flux2d is set'
+     return
+  endif
+  
+  if keyword_set(onedflux) AND NOT keyword_set(extract) then begin
+     splog, 'ERROR: If /onedflux is set you must set /extract'
+     return
+  endif
+  
+  if nexp EQ 0 then begin
+     splog, 'ERROR: No images given'
+     return
+  endif
+  if nexp EQ 1 then begin
+     splog, 'ERROR: Only one image given'
+     return
+  endif
+
+  if n_elements(trace) NE nexp then begin 
+     splog, 'ERROR: # of elements of trace and scales must equal # of elements of sci_arr'
+     return
+  endif
+  
+  if  keyword_set(scales) AND (n_elements(scales) NE nexp) then begin
+     splog, 'ERROR: # of elements of trace and scales must equal # of elements of sci_arr'
+     return
+  endif
+
+
+
+;---
+; Setting defaults
+  if NOT keyword_set(outputname) then $
+     name= 'coadd2d-'+(strsplit(sci_arr[0], '-', /extract))[1] $
+  else name=outputname
+
+  if NOT keyword_set(splogname) then $
+     splogname=(strsplit(name, '.', /extract))[0]+'.log'
+  splog, filename=splogname, no_stdout=quiet, 'Beginning...'
+
+  if keyword_set(path) then sci_arr=path+sci_arr
+
+
+  FOR i=0, Nexp-1 DO BEGIN      ;for loop through each of the images
+     
+;open structure array for each sci-file
+     str1=mrdfits(sci_arr[i],5,/silent)
+;find number of traces in each images
+     ntrace=n_elements(str1)
+;adding tags to structure and pull out tags that you need
+     str_add={scifile:'', xpos_med:0., flux_opt_med:0., xshift:0., yshift:0.}  
+     str_add=replicate(str_add, ntrace)
+     str1=struct_addtags(str1, str_add) ;adding new tags to structure
+     str1.scifile=sci_arr[i]
+     str1.xpos_med=djs_median(str1.xpos, 1)
+     str1.flux_opt_med=djs_median(str1.flux_opt, 1)    
+     tags=['SCIFILE', 'OBJID', 'SLITID', 'FLX_SHFT_WAV', 'FLX_SHFT_SPA', $
+           'XPOS_MED', 'FLUX_OPT_MED', 'XSHIFT', 'YSHIFT', 'FWHM', 'XPOS', $
+		'WAVE_OPT']
+     str1=struct_selecttags(str1, select_tags=tags) ;pulling out wanted tags
+     if i EQ 0 then str=str1 else str=[str, str1]
+  ENDFOR
+
+
+  FOR g=0, Nexp-1 DO  BEGIN
+     wh=where(strmatch(str.scifile, sci_arr[g])) ;matching by science file
+;removing all non-used traces from structure array
+     wh2=wh[trace[g]]
+     
+     if g EQ 0 then str2=str[wh2] else str2=[str2, str[wh2]]
+  ENDFOR 
+
+; we now have a structure that only has information about the traces 
+;	we care about
+
+splog,filename=splogname,/append,no_stdout=quiet, $
+           'Flexure shift found to be ', str2.flx_shft_wav
+
+
+  str2.xshift=(str2[0].xpos_med-str2.xpos_med) ;determine the shifts
+  str2.yshift=-(str2[0].flx_shft_wav-str2.flx_shft_wav) ;minus sign added 
+							;because of check
+							;with coadd_register
+							;see below
+
+;---------------+++++++++++++++---------------
+;-The Following lines of code are a check implemented by developers... feel
+; free to ignore the lines starting HERE!!!
+;for ii=0, nexp-1 do begin
+;nn=n_elements(str2[0].xpos)
+;lambda_lya=4000
+;lyapix_y_ref = interpol(findgen(nn), str2[0].WAVE_OPT, lambda_lya)
+;lyapix_y_shf = interpol(findgen(nn), str2[ii].WAVE_OPT, lambda_lya)
+;
+;lyapix_x_ref = interpol(str2[0].XPOS, findgen(nn), lyapix_y_ref)
+;lyapix_x_shf = interpol(str2[ii].XPOS, findgen(nn), lyapix_y_shf)
+;testyshift = lyapix_y_ref - lyapix_y_shf 
+;testxshift = lyapix_x_ref - lyapix_x_shf
+;splog, 'Calculated:', str2[ii].xshift, str2[ii].yshift
+;splog, 'TEST TEST TEST', testxshift, testyshift
+;endfor
+;END developers code check
+;---------------+++++++++++++++---------------
+
+
+
+
+  hctot=0. ;initializing heliocentric correction total
+  FOR i=0, Nexp-1 DO BEGIN
+     splog,filename=splogname,/append,no_stdout=quiet, $
+           '********************************************'
+     splog,filename=splogname,/append,no_stdout=quiet, 'Working on image ', i
+     splog,filename=splogname,/append,no_stdout=quiet, $
+           '********************************************'
+     
+     splog,filename=splogname,/append,no_stdout=quiet, "Shift (space,lambda) ", $
+           sci_arr[i], str2[i].xshift, str2[i].yshift
+     IF (abs(str2[0].flx_shft_spa-str2[i].flx_shft_spa) GT 0) THEN $
+        splog,filename=splogname,/append,no_stdout=quiet, $
+              "WARNING: ",sci_arr[i]," has a shift for spatial flexure: ", $
+              str2[0].flx_shft_spa-str2[i].flx_shft_spa, $
+              'This shift is being ignored...'
+                                ; this might not be entirely correct'
+;---
+; get sky subtracted image and other data
+     data=mrdfits(sci_arr[i],0,Header,/silent, /fscale) ;image
+     sky=mrdfits(sci_arr[i],2,/silent, /fscale)         ;sky model
+     ivar=mrdfits(sci_arr[i], 1, /silent, /fscale)      ;inverse variance
+     if NOT keyword_set(noskysub) then skysub=data-sky else skysub=data 
+			                                ;sky-subtracted image
+     if keyword_set(kludge_skysubtract) then $
+	 skysub=kludge_skysub(data,str2[i].xpos_med+30, str2[i].xpos_med +50)
+     str_phony=mrdfits(sci_arr[i], 5, /silent) ;structure needs to be read in
+                                ;for heliocentric correction	 
+     if keyword_set(xwave) then begin
+        skysub=transpose(skysub)
+        ivar=transpose(skysub)
+     endif
+     
+     if keyword_set(wvimg) AND NOT keyword_set(nohelio) then begin 
+        rlong_helio, header, str_phony[0], hel_corr=hc ;heliocentric correciton
+                                ;long_helio, header, str_phony[0],
+                                ;hel_corr=hc ;heliocentric
+                                ;correciton--original version?
+        splog, /append, no_stdout=quiet, filename=splogname, $
+               'Heliocentric Correction of ', (hc^2-1)*299792.458d/(hc^2+1), ' km/s'
+        hctot+=hc 
+     endif
+;---------------lacosmic removed because we beleive it is cutting out 
+;		non-cosmic rays
+;    if keyword_set(lacosmic) then begin  
+;        filename='tEmP_LoNg_CoaDd_ewhrtktgky' ;programs write some temp files
+;        
+;        filename1=filename+strcompress(string(i), /remove_all) +'.fits'
+;        mwrfits, skysub, filename1, /create
+;       cosmicsave=strcompress(string(filename, 'crsave',i,".fits"),/remove_all)
+;        mask=strcompress(string(filename, 'mask',i,".fits"),/remove_all)
+;        splog,filename=splogname,/append,no_stdout=quiet, $
+;          "Running LA_COSMIC on ", sci_arr[i]   
+;        
+;        la_cosmic, [filename1], outlist=[cosmicsave], $
+;          masklist=[mask], sigclip=2., gain=-1.,$
+;          readn=rn,niter=6,statsec=statsec
+;        if i EQ 0 then maski=mrdfits(mask) else maski+=mrdfits(mask)*2^i
+;        
+;        spawn, 'rm -f tEmP_LoNg_CoaDd_ewhrtktgky*' ;temp files removed
+;    endif else begin
+;        if i EQ 0 then maski=ivar EQ 0 else maski+=(ivar EQ 0)*2^i
+;    endelse
+     
+     
+     if keyword_set(integer) then begin
+        splog,filename=splogname,/append,no_stdout=quiet, $
+              'Rounding shifts to integers'
+        splog, filename=splogname, /append, no_stdout=quiet, $
+               'Rounded Shifts (dx, dy): (', str2[i].xshift, $
+               str2[i].yshift, ') changed to (',round(str2[i].xshift), $
+               round(str2[i].yshift), ')'
+        
+        str2[i].xshift=round(str2[i].xshift)
+        str2[i].yshift=round(str2[i].yshift)
+        
+     endif else begin
+                                ;if we don't perform integer shifts we have
+				;to be much more careful
+                                ;about things like cosmics and masking over 
+				;bad pixels
+        splog,filename=splogname,/append,no_stdout=quiet, $
+              'Performing Sigma Filtering'
+        skysub1=sigma_filter(skysub, n_sigma=10)
+	whskysub=where(abs(skysub-skysub1) GT 1d-6, skysubct)
+        if skysubct NE 0 then ivar[whskysub]=0
+        skysub=skysub1
+        rwhere, ivar EQ 0, ct, x=x,y=y
+        mask=ivar EQ 0
+        
+        if ct NE 0 then begin
+           splog,filename=splogname,/append,no_stdout=quiet, $
+                 'Interpolating over bad pixels'
+           skysub=djs_maskinterp(skysub, mask, iaxis=0)
+           skysub=djs_maskinterp(skysub, mask, iaxis=1)
+           ivar=djs_maskinterp(ivar, mask, iaxis=0)
+           ivar=djs_maskinterp(ivar, mask, iaxis=1)
+        endif
+        splog,filename=splogname,/append,no_stdout=quiet, $
+              'Interpolatation Complete: interpolated over', ct, ' pixels'
+     endelse
+     
+     splog,filename=splogname,/append,no_stdout=quiet, 'Applying the shifts'
+     
+     shfits=shiftf(skysub,str2[i].xshift,str2[i].yshift) ;shifted image  
+     ivar=shiftf(ivar, str2[i].xshift,str2[i].yshift)
+     splog,filename=splogname,/append,no_stdout=quiet, $
+           'Shifted Image', i, ': (dx, dy)=', $
+           '(', str2[i].xshift, ',',str2[i].yshift, ')'
+     
+     
+     if NOT keyword_set(integer) then begin
+        if x[0] NE -1 then begin ;setting mask on interpolated pixels
+           ivar[x+ceil(str2[i].xshift), y+ceil(str2[i].yshift)]=0
+           ivar[x+floor(str2[i].xshift), y+floor(str2[i].yshift)]=0
+           ivar[x+ceil(str2[i].xshift), y+floor(str2[i].yshift)]=0
+           ivar[x+floor(str2[i].xshift), y+ceil(str2[i].yshift)]=0
+        endif
+     endif
+     
+
+     
+
+     if i EQ 0 then begin       ;stacking images into 3-dimensional matrices
+        ivars=ivar
+        imgs=shfits
+     endif else begin
+        ivars=[[[ivars]], [[ivar]]]	
+        imgs=[[[imgs]], [[shfits]]]
+     endelse	
+  ENDFOR
+  splog,filename=splogname,/append,no_stdout=quiet, $
+        '********************************************'
+
+  splog,filename=splogname,/append,no_stdout=quiet, 'Preparing to Stack Images'
+
+  splog,filename=splogname,/append,no_stdout=quiet, $
+        '********************************************'
+
+  if NOT keyword_set(scales) then begin $
+     scales=(str2[0].flux_opt_med) ;basic scale determination
+     scales=scales/str2.flux_opt_med
+     
+  endif
+  splog, no_stdout=quiet, /append, filename=splogname, 'Scales found to be ', $
+         '(',scales, ')'
+
+  s=size(imgs)
+  for i=0, n_elements(scales)-1 do begin
+     if i EQ 0 then scl=replicate(scales[i], s[1], s[2]) $
+     else scl=[[[scl]], [[replicate(scales[i], s[1], s[2])]]]
+  endfor
+  imgs_scl=imgs*scl
+  ivar_scl=ivar/scl^2
+
+  if keyword_set(cr_reject) then begin
+     
+     med=djs_median(imgs_scl, 3)
+     medimg=rebin(med, s[1], s[2], s[3])
+     wh=where(abs(imgs-medimg) GT 10*(ivar_scl NE 0)* $
+              sqrt(1./(ivar_scl+(ivar_scl EQ 0))), ctsigclip)
+     splog,filename=splogname,/append,no_stdout=quiet, $
+           'CUTTING 10 SIGMA OUTLIERS'
+     if ctsigclip NE 0 then ivars[wh]=0
+     if nexp LT 3 then splog,filename=splogname,/append,no_stdout=quiet, $
+                             'USING MEDIAN OF LESS THAN 3 IMAGES: NOT RECOMMENDED'
+  endif else if nexp GT 2 then splog,filename=splogname,/append,no_stdout=quiet, $
+       'Did not cut Cosmic Rays based on multiple images... We suggest using keyword CR_REJECT'
+
+  if keyword_set(handmask) then ivars=ivars*handmask
+
+  stacked_mask=total(ivars EQ 0,3) NE 0
+if not keyword_set(no_fwhm_weight) then begin
+  weights=1./str2.fwhm
+splog, /append, filename=splogname, no_stdout=quiet, $
+	'Weighting by FWHM', str2.fwhm
+endif
+;--- actual image stacking
+
+if not keyword_set (median) then begin
+    ;do the proper combine
+    rm_combine, imgs,new_img, ivars= ivars, new_ivar=new_ivar, scales=scales $
+      ,weights=weights, mask=(ivars NE 0), med_ivar=med_ivar, /ivar_median
+endif else begin
+    ;do a quick median
+    new_img=djs_median(imgs,3)
+    ;set to 0 mask and invvar
+    new_ivar=new_img-new_img
+    stacked_mask=new_img-new_img
+endelse
+
+
+  
+  splog,filename=splogname,/append,no_stdout=quiet, 'Images Stacked'
+
+  mwrfits, new_img, name, /create ;write out the image
+  mwrfits, new_ivar, name         ;write out the inverse variance image
+  mwrfits, stacked_mask, name     ;write out stacked mask
+  mwrfits, str2, name             ;write out the structure array
+
+  if keyword_set(wvimg) then begin
+     wave=mrdfits(wvimg, /fscale)
+     if keyword_set(xwave) then wave=transpose(wave)
+     
+     if NOT keyword_set(NOHELIO) then begin
+        hc_avg=hctot/nexp
+        splog, /append, filename=splogname, no_stdout=quiet, $
+               'Applying Heliocentric Correction to Wavelength Solution:', $
+               (hc_avg^2-1)*299792.458d/(hc_avg^1+1), ' km/s'
+	airtovac, wave
+        wave=wave*hc_avg
+     endif
+     wave=shiftf(wave,0 ,-str2[0].flx_shft_wav)	; minus sign added due to
+						; check using Robert's QSO
+					        ; with big flexure correction
+     mwrfits, wave, name        ;write out the wavelength image
+  endif
+
+;have a look at the stacked image 
+ ; xatv, new_img, /block
+
+  splog, filename=splogname, /append, no_stdout=quiet, "Log written to ", $
+         splogname
+  splog,filename=splogname,/append,no_stdout=quiet, $
+        "Output Written to ", name
+
+
+  if keyword_set(flux2d) then begin ;fluxing the 2dimage
+      splog, /append, filename=splogname, no_stdout=quiet, $
+                'Beginning flux2d'
+
+     if NOT keyword_set(slitwidth) then begin
+       splog, /append, filename=splogname, no_stdout=quiet, $
+		'Setting Slitwidth to default 1 arcsecond'
+       slitwidth=1.
+     endif
+     sensimage=sensfunc_2d(sensfuncfile, sci_arr[0],wave, pixscale, slitwidth)
+     
+     flux2dname=(strsplit(sci_arr[0], '-', /extract))[1]
+     flux2dname='flux2d-'+flux2dname
+     mwrfits, sensimage*new_img, flux2dname, /create ;write out fluxed image
+     mwrfits, new_ivar/sensimage^2, flux2dname
+     mwrfits, sensimage, flux2dname           ;write out sensitivity funciton
+     splog, /append, filename=splogname, no_stdout=quiet, $
+                'Completed flux2d'
+
+  endif
+
+
+  if keyword_set(extract) then begin ;extraction of 1d spectrum
+     splog, /append, filename=splogname, no_stdout=quiet, $
+                'Beginning Extraction'
+
+     strlr=mrdfits(sci_arr[0],5)
+     strlr=strlr[trace[0]]
+     extraction=long_2dextract(new_img, new_ivar, wave, strlr)
+     extractname=(strsplit(sci_arr[0], '-', /extract))[1]
+     extractname='extr-'+extractname
+     
+     mwrfits,extraction  ,extractname, /create
+     splog, /append, filename=splogname, no_stdout=quiet, $
+                'Completed Extraction'
+
+  endif
+
+  if keyword_set(onedflux) then begin ;fluxing of 1dspectrum
+     splog, /append, filename=splogname, no_stdout=quiet, $
+                'Beginning onedflux'
+
+     flux1dname=(strsplit(sci_arr[0], '-', /extract))[1]
+     flux1dname='flux1d-'+flux1dname
+     fluxed=flux1d(extraction, sensfuncfile, headfits(sci_arr[0]))
+;onedflux(extraction, sensfuncfile, headfits(sci_arr[0]))
+     
+     mwrfits, fluxed, flux1dname, /create
+     splog, /append, filename=splogname, no_stdout=quiet, $
+                'Completed onedflux'
+
+  endif
+
+ splog, /append, filename=splogname, no_stdout=quiet, $
+                'All done!'
+
+end

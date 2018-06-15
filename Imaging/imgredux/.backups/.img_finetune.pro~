@@ -1,0 +1,450 @@
+;+
+;
+;  This procedure uses SExtractor, scamp and swarp to fit a WCS
+;  solution in the images and to stack a mosaic.  
+;    
+;  A combination of objectname, filter and side define all the images
+;  to stack together.
+;
+;
+;  listfile     --> a list of fits file reduced by img_ccdproc with
+;                   info on the:
+;                   filename, filter, exptime, objectname, side 
+;  path         --> where to get the data
+;  instr        --> the instrument used
+;  noprep       --> skip preparation, but images have to be 
+;                   in scampath and in multiextension form with wcs
+;                   and header information 
+;  nosex        --> skip the sextractor part. To continue, assume that 
+;                   extracted binary catalogues are already available
+;                   in scampath. 
+;  noscamp      --> assumes that images are already with perfect wcs
+;                   and moves to combining them  
+;  sdss         --> if the images are cover by sdss set this flag to
+;                   use sdss as a reference. If not, uses USNO-B1 
+;  
+;  nophot       --> set this flag if observations were in non
+;                   photometric conditions
+;
+;  scampiter    --> iteration in scamp 
+;
+;  noswarp      --> skip the combine operation
+;
+;  noskysub     --> during the preparation, a constant sky level is
+;                   subtracted from each frame. noskysub disable this operation.
+;  
+;
+;-
+
+
+
+
+pro img_wcsstack, listfile, path=path, instr=instr, noprep=noprep, nosex=nosex, sdss=sdss, $
+                  nophot=nophot, scampiter=scampiter, noscamp=noscamp, noswarp=noswarp, noskysub=noskysub
+
+
+splog, 'Starting img_wcsstack at ', systime(), filename='splog.scampswarp', /append
+
+
+;;set default
+if ~keyword_set(instr) then instr='LRIS'
+if ~keyword_set(path) then path='./Raw/'
+if ~keyword_set(scampiter) then scampiter=2
+if (scampiter lt 2) then scampiter=2 ;;2+loose one
+
+
+;;initialise a common with information on the size of the ccd
+common ccdinfo, xfull,yfull,nchip,namp,biaslev,satur, goodata
+;;xfull,yfull the full size of the mosaic
+;;nchip the number of chip that makes the mosaic
+;;namp is the number of amplifier
+;;biaslev is the typical counts in the bias (use to select good flats)
+;;satur  is the saturation level (use to reject saturated flats and CR)
+;;goodata is array of x0,x1,y0,y1 which specify the region of good data in case of vignetting (to
+;; normalise flat,wgt image etc..)
+if(instr eq 'LRIS') then begin
+xfull=4096
+yfull=4096
+nchip=2
+namp=4
+biaslev=1000
+satur=65535
+goodata=[435,3750,740,3160]
+endif else splog, 'Instrument ', instr, ' not supported!'
+
+
+
+;;load the info from the listfile
+
+
+readcol, listfile, filename, filter, time, object, side, format='A,A,F,A,A'
+
+;;Find out how many objects, filters and sides we have
+obj=find_different(object,/str)
+filt=find_different(filter,/str)
+sid=find_different(side,/str)
+
+
+;;create subfolder in path that will contain a lot of junk 
+;;accumulated by all the steps
+spawn, 'mkdir -p '+path+'scamp'
+scampath=path+'scamp/'
+spawn, 'mkdir -p '+path+'swarp'
+swarpath=path+'swarp/'
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;Prepoc: update header and fit first crude astro
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+if ~keyword_set(noprep) then begin
+    
+;;do a 3 loop over side,obj,filt
+    idgroup=0 ;;group images for scamp
+    for ss=0, n_elements(sid)-1 do begin
+        for oo=0, n_elements(obj)-1 do begin
+            for ff=0, n_elements(filt)-1 do begin
+                ;;index of the images in a group
+                index=where(side eq sid[ss] and object eq obj[oo] and filter eq filt[ff],nmt)
+                
+                ;;if found a combination do job
+                if(nmt gt 0) then begin
+                    ;;loop over a group and process it
+                    for gg=0, n_elements(index)-1 do begin
+                        ;;current index
+                        i=index[gg]
+                        splog, 'Prepare ', filename[i]
+                        ;;read in the images and the different extensions
+                        sci=mrdfits(path+filename[i],0,header,/sil)
+                        wgt=mrdfits(path+filename[i],1,/sil)
+                        mas=mrdfits(path+filename[i],2,/sil)
+                        
+                        ;;apply sky subtraction
+                        if ~keyword_set(noskysub) then begin
+                            mmm, sci[goodata[0]:goodata[1],goodata[2]:goodata[3]], skymod, skysig, skysk
+                            sci=temporary(sci-skymod)
+                            sxaddpar, header, 'SC_SKY', skymod
+                        endif
+                        
+                        ;;Make a first guess of the WCS and update header.
+                        ;;Write in multi extension images
+                        img_prescamp, sci, wgt, mas, header, scampath=scampath, instr=instr, $
+                          filter=filter[i], time=time[i], object=object[i], filename=filename[i],$
+                          path=scampath, idgroup=idgroup, nophot=nophot
+                    endfor
+                    ;;update id group
+                    idgroup++
+                endif
+            endfor
+        endfor
+    endfor
+endif  ;;end of preparation
+
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;Run sextractor to generate catalogue for scamp
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+if ~keyword_set(nosex) then begin
+
+;;define generic parameters
+    sexconfig=getenv("MIDL")+"/Imaging/imgredux/utility/img_default.sex"
+    sexparam=getenv("MIDL")+"/Imaging/imgredux/utility/img_default_sex.param"
+    sexconv=getenv("MIDL")+"/Imaging/imgredux/utility/img_default_sex.conv"
+    sexnnw=getenv("MIDL")+"/Imaging/imgredux/utility/img_default_sex.nnw"
+    
+;;loop over images
+    for im=0, n_elements(filename)-1 do begin
+        
+        splog, 'Run sextractor on ', filename[im]
+        
+        ;;define generic parameters with filenames
+        weightopts=' -WEIGHT_TYPE MAP_WEIGHT -WEIGHT_IMAGE '+scampath+"wgt_"+filename[im]+' -WEIGHT_THRESH 0'
+        cat=scampath+"cat_"+filename[im]
+        bgimage=scampath+"check_"+filename[im]
+        image=scampath+"sci_"+filename[im]
+        
+        ;;scale saturation for gain and exptime (instrument specific)
+        if(instr eq 'LRIS') then begin
+            ;;apply crude bias subtraction and gain
+            if(side[im] eq 'R') then  saturation=rstring(64000./time[im]) else $
+              saturation=rstring(64000.*1.6/time[im])
+            ;;set guess for zp
+            gzp='27.6'
+        endif
+        
+        spawn, 'sex '+image+' -c '+sexconfig+' -CATALOG_NAME '+cat+' -CATALOG_TYPE FITS_LDAC'+$
+          ' -PARAMETERS_NAME '+sexparam+' -DETECT_THRESH 2.0 -ANALYSIS_THRESH 2.0 -FILTER_NAME '+$
+          sexconv+' -STARNNW_NAME '+sexnnw+weightopts+' -CHECKIMAGE_TYPE APERTURES -CHECKIMAGE_NAME '+$
+          bgimage+' -VERBOSE_TYPE NORMAL -DEBLEND_MINCONT 0.01 -BACK_TYPE AUTO'+$
+          ' -MEMORY_BUFSIZE 4096 -GAIN 1. -SATUR_LEVEL '+saturation+' -MAG_ZEROPOINT '+gzp, /sh
+        
+    endfor
+    
+endif
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;Run scamp to do astrometry 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+if ~keyword_set(noscamp) then begin
+
+;;convert the list of images to a list of .cat files
+    catlist=strarr(n_elements(filename))
+    for i = 0,n_elements(filename)-1 do begin
+        catlist[i]=scampath+"cat_"+filename[i]
+    endfor
+
+;;set catalogue and unique solution
+    if keyword_set(sdss) then astref_catalog = 'SDSS-R7' else astref_catalog = 'USNO-B1'
+    astrinstru_key = 'SC_ID'
+    
+
+;;read in group information and run scamp over individual group
+    group=intarr(n_elements(filename))
+    for im=0, n_elements(filename)-1 do begin
+        head=headfits(scampath+"sci_"+filename[im])
+        group[im]=fxpar(head,"SC_ID")
+    endfor
+    
+    ;;find grop and loop
+    gr=find_different(group)
+
+  
+    ;;set location of scamp files and general stuff
+    scampconfig=getenv("MIDL")+"/Imaging/imgredux/utility/img_default.scamp"
+   
+    for gg=0, n_elements(gr)-1 do begin ;;over group
+        
+        ind=where(group eq gr[gg])
+        subcatlist=catlist[ind]
+        currfilt=filter[ind[0]]
+        subimage=filename[ind]
+        
+        ;;match the filter with catalogue (instr dependent)
+        
+        if(instr eq 'LRIS') then begin
+            if keyword_set(sdss) then begin
+                case currfilt of
+                    'U': astref_band='g'  ;;for deep u band use g sloan
+                    'B': astref_band='g' 
+                    'V': astref_band='g' 
+                    'R': astref_band='r' 
+                    'I': astref_band='i' 
+                endcase
+            endif else begin
+                case  currfilt of
+                    'U': astref_band='Bj' 
+                    'B': astref_band='Bj' 
+                    'V': astref_band='Rf' 
+                    'R': astref_band='Rf' 
+                    'I': astref_band='In' 
+                endcase
+            endelse
+            
+            ;;specify a set of 3 stability and mosaic type to be used in
+            ;;the iterations
+            instr_mos_type=['LOOSE','FIX_FOCALPLANE','FIX_FOCALPLANE'] ;;mosaic the 2 ccd
+            instr_stability=['INSTRUMENT','INSTRUMENT','INSTRUMENT'] ;;lris is stable
+
+   
+        endif
+  
+
+      
+        
+        ;;do the iterations
+        for iter = 0, scampiter do begin 
+            case iter of
+                0: begin
+                    degree = '3'
+                    mosaic_type = instr_mos_type[0]
+                    position_maxerr = '2.0'
+                    posangle_maxerr = '3.0'
+                    crossid_radius = '5' ;as
+                    stability_type= instr_stability[0] 
+                end
+                1: begin
+                    degree = '3'
+                    mosaic_type = instr_mos_type[1]
+                    position_maxerr = '0.5'
+                    posangle_maxerr = '2.0'
+                    crossid_radius = '4' ;as
+                    stability_type= instr_stability[1] 
+                end
+                else: begin
+                    degree = '3'
+                    mosaic_type = instr_mos_type[2]
+                    position_maxerr = '0.5'
+                    posangle_maxerr = '2.0'
+                    crossid_radius = '2' ;as
+                    stability_type= instr_stability[2] 
+
+                end
+            endcase
+            
+            splog, "###----------- SCAMP iteration "+rstring(iter+1)+" -------------###" 
+            
+            ;;Flip axis is disabled
+            spawn, 'scamp '+strjoin(subcatlist,' ')+' -c '+scampconfig+' -CHECKPLOT_DEV PS'+$
+              ' -PIXSCALE_MAXERR 1.1 -POSANGLE_MAXERR '+posangle_maxerr+' -POSITION_MAXERR '+position_maxerr+$
+              ' -ASTREF_CATALOG '+astref_catalog+' -ASTREF_BAND '+astref_band+$
+              ' -MERGEDOUTCAT_TYPE FITS_LDAC -SAVE_REFCATALOG Y -REFOUT_CATPATH '+scampath+$
+              ' -DISTORT_DEGREES '+degree+' -MOSAIC_TYPE '+mosaic_type+$
+              ' -STABILITY_TYPE '+stability_type+' -CDSCLIENT_EXEC aclient_cgi'+$
+              ' -ASTRINSTRU_KEY '+astrinstru_key+' -NTHREADS 1 -WRITE_XML N -VERBOSE_TYPE NORMAL '+$
+              ' -CROSSID_RADIUS '+crossid_radius, /sh
+
+                        
+            ;;update header info here to iterate
+            ;;ahead overwrites wcs info
+            for nn=0, n_elements(subimage)-1 do begin
+                headcat=strmid(subcatlist[nn],0,strlen(subcatlist[nn])-5)+".head"
+                aheadcat=strmid(subcatlist[nn],0,strlen(subcatlist[nn])-5)+".ahead"
+                spawn, "cp  "+headcat+" "+aheadcat
+            endfor
+            
+        endfor ;;over scamp iterations
+        
+    endfor ;;over group
+    
+  
+endif ;;over scamp section 
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;Run swarp to combine 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+
+if ~keyword_set(noswarp) then begin
+
+    ;;copy files + header from scamp to swarp
+    splog, 'Transfer files...'
+    spawn, "cp  "+scampath+"sci_*.fits "+swarpath+"."
+    spawn, "cp  "+scampath+"wgt_*.fits "+swarpath+"."
+    spawn, "cp  "+scampath+"cat_*.head "+swarpath+"."
+
+
+    ;;make output subfolder
+    spawn, "mkdir -p "+swarpath+'output'
+    outdir=swarpath+'output/'
+
+
+    ;;associate file and header
+    listhead=strarr(n_elements(filename))
+    for nn=0, n_elements(filename)-1 do begin
+        rootname=strmid(filename[nn],0,strlen(filename[nn])-5)
+        spawn, "mv  "+swarpath+"cat_"+rootname+".head "+swarpath+"sci_"+rootname+".head"
+        spawn, "mv  "+swarpath+"wgt_"+rootname+".fits "+swarpath+"sci_"+rootname+".wgt.fits"
+        listhead[nn]="sci_"+rootname+".head"
+    endfor
+    
+    
+
+    ;;form group again and loop over group to combine
+    ;;read in group information and run scamp over individual group
+    group=intarr(n_elements(filename))
+    for im=0, n_elements(filename)-1 do begin
+        head=headfits(swarpath+"sci_"+filename[im])
+        group[im]=fxpar(head,"SC_ID")
+    endfor
+    
+    ;;find grop and loop
+    gr=find_different(group)
+    
+    ;;set location of swarp files and general stuff
+    swarpconfig=getenv("MIDL")+"/Imaging/imgredux/utility/img_default.swarp"
+    
+    ;;set swarp parameters
+    weightopts = ' -WEIGHT_TYPE MAP_WEIGHT -WEIGHT_SUFFIX .wgt.fits'
+    fluxscaleopts = ' -FSCALE_KEYWORD SW_SCALE -FSCALASTRO_TYPE FIXED' ;;some error at the edge of field
+    combinetype = 'WEIGHTED'  ;;CR are with 0 weight
+    coordtype = 'EQUATORIAL'
+    projection_err = '0.001'
+    centeropts = ' -CENTER_TYPE ALL'
+    pixelscale_type = 'MANUAL' 
+
+    ;;get pipeline keyword
+    general_key='SC_OBJ,SC_GAIN,SC_RDN,SC_EXP,SC_AIR,SC_FIL,SC_SKY,COMMENT'
+    
+    ;;instrument specific
+    if(instr eq 'LRIS') then begin
+        instru_key='DATE_BEG,DATE_END,UTC-END,TTIME,ELAPTIME,OBSERVER,TELESCOP,UTC,MJD-OBS,ST,DATE-OBS,AIRMASS,AZ,DEC,EL,EQUINOX,HA,PONAME,RA,ROTMODE,ROTPOSN,ROTPPOSN,REDFILT,INSTRUME,BLUFILT'
+        pixel_scale = '0.135'  ;;set output pixscale
+    endif
+    
+    ;;merge keyw
+    keywords=general_key+','+instru_key
+  
+
+    for gg=0, n_elements(gr)-1 do begin ;;over group
+        
+        ;;ind subgroup
+        ind=where(group eq gr[gg])
+        currfilt=filter[ind[0]]
+        currobj=object[ind[0]]
+        subimage=filename[ind]
+        subhead=listhead[ind]
+
+
+        ;;create names for coadded images 
+        outname=outdir+"sci_"+rstring(currobj)+"_"+rstring(currfilt)+".fits"
+        outwgt=outdir+"wgt_"+rstring(currobj)+"_"+rstring(currfilt)+".fits"
+        
+        
+        splog, 'Combine ', currobj, ' with filter ', currfilt
+
+        ;;adjust scales from absolute to relative
+        refflx=0
+        newflx=strarr(n_elements(subimage))
+        for ingr=0, n_elements(subimage)-1 do begin
+            
+            ;;get fluxscale, renormalize and write keyw for swarp
+            spawn, 'gethead '+swarpath+subhead[ingr]+' FLXSCALE', flxsc
+            if(ingr eq 0) then refflx=1D*flxsc
+            newflx[ingr]=rstring((1D*flxsc)/refflx)
+            splog, "Scale ", 'sci_'+subimage[ingr], " by ", newflx[ingr]
+        
+        endfor
+        
+        spawn, 'swarp '+strjoin(swarpath+'sci_'+subimage,',')+' -c '+swarpconfig+$
+          ' -IMAGEOUT_NAME '+outname+' -WEIGHTOUT_NAME '+outwgt+$
+          weightopts+' -HEADER_SUFFIX .head'+fluxscaleopts+' -FSCALE_DEFAULT '+strjoin(newflx,',')+$
+          ' -COMBINE_TYPE '+combinetype+' -CELESTIAL_TYPE '+coordtype+$
+          ' -PROJECTION_TYPE TAN -PROJECTION_ERR '+projection_err+centeropts+$
+          ' -PIXELSCALE_TYPE '+pixelscale_type+' -PIXEL_SCALE '+pixel_scale+' -RESAMPLE_DIR '+outdir+centeropts+$
+          ' -RESAMPLING_TYPE LANCZOS3 -INTERPOLATE Y -GAIN_KEYWORD SC_GAIN -GAIN_DEFAULT 1.0'+$
+          ' -SUBTRACT_BACK N -COMBINE_BUFSIZE 1024 -COPY_KEYWORDS '+keywords+' -WRITE_FILEINFO N'+$
+          ' -VERBOSE_TYPE NORMAL -NTHREADS 4 -DELETE_TMPFILES Y', /sh
+
+
+        ;;add the weight as extension of the fits image
+        finsci=mrdfits(outname,0,h1)
+        finwgt=mrdfits(outwgt,0,h2)
+        
+        ;;add in extensions
+        mkhdr, hdr, finsci    ;generate a basic FITS header
+        mwrfits, UNDEF, outname, hdr, /create
+        mwrfits, finsci, outname, h1 ;;put wcs header here
+        mwrfits, finwgt, outname
+
+        spawn, 'rm -f '+outwgt
+        
+    endfor ;;group of images
+
+
+endif ;;over swarp section 
+
+
+splog, 'All done at ', systime(), /close
+
+
+end
+

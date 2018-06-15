@@ -1,0 +1,119 @@
+;Reads a grid of trasmission (either Madau 95 or Prochaska 09)
+;and compute the IGM corrections for broad band photometry in a filter 
+;provided by the user.
+
+
+;filter_tra   file of filter transmission curve (lambda in AA and transmission) 
+;z_out        output, the redshift grid
+;IGM_corr     output, the correction values for each grid of redshift
+;TYPE         keyword. You can specify which kind of IGM transmission
+;             to use. Currenlty supported 
+;             M95       --> Calculation by Madau 95 
+;             P10lya    --> Assume f(N,X) in Prochaska 10, Lya
+;                           evoltuion only
+;             P10full   --> Assume f(N,X) in Prochaska 10, Lya, LLS,
+;                           SLSS and DLA evoltuion
+;
+;SAVENAME     keyword. If set to a filename, the z,TRA in output is
+;             saved in a text file  
+;DISPLAY      keyword. If set, trasnmission and filters are displayed
+;             for each z step
+
+
+;updated April 2010 to handle new evoltuion.
+
+PRO figm_grid, filter_tra, z_out, IGM_corr, TYPE=type, SAVENAME=savename, DISPLAY=display
+
+
+;set default
+if ~keyword_set(type) then type='P10full' 
+
+
+;open filter transmission curve
+readcol, filter_tra, Lfilter, Tfilter, /silent
+ 
+;make a fine grid for integration
+prec=0.005
+fine_lambda=mkarr(MIN(Lfilter),MAX(Lfilter),prec)
+fine_Tfilter=interpol(Tfilter,Lfilter,fine_lambda)
+
+;if Madau set, read grid 0-10 spacing 0.2 
+if (type eq 'M95') then begin
+    ;make redshift grid
+    z_out=make_array(51,/index)*0.2
+    IGM_corr=z_out-z_out
+    ;now loop and make the convolution      
+    for i=0, 50 do begin
+        read_madau95, z_out[i], lam_mad, tau_mad, igm_mad
+        ;interpolate transmission
+        fine_trans=interpol(igm_mad,lam_mad,fine_lambda)
+        ;correct overshoot
+        ll=where(fine_lambda LT 912.6*(1+z_out[i]),nll)
+        la=where(fine_lambda GT 1215.6701*(1+z_out[i]),nla)
+        if(nll GT 0) then fine_trans[ll]=0.
+        if(nla GT 0) then fine_trans[la]=1.
+        if keyword_set(display) then begin
+            plot, fine_lambda, fine_trans, yrange=[-0.1,1.1]
+            oplot, fine_lambda, fine_Tfilter
+            wait, 0.5
+        endif
+        ;make intergal (this is correction not transmission)
+        igm_tra=TOTAL(fine_trans*fine_Tfilter*prec)/TOTAL(fine_Tfilter*prec)
+        if (igm_tra GT 0) then IGM_corr[i]=1./igm_tra ELSE IGM_corr[i]=1D30
+    endfor
+endif else begin
+
+    ;uses Prochaska 10 f(N,X)
+    if (type eq 'P10full') then begin
+        splog, 'Use full_evol' 
+        path=getenv("HOME2")+'/PROGETTI/IGM/result/full_evol/'
+    endif
+
+    if (type eq 'P10lya')  then begin
+        splog, 'Use lyaf_evol'
+        path=getenv("HOME2")+'/PROGETTI/IGM/result/lyaf_evol/'
+    endif
+     ;default case with Prochaska 09
+     ;(currently up to z=8. Available to z=10)
+     readcol, path+'IGM_list', name, FORMAT='A',/silent
+     numstep=N_ELEMENTS(name)
+     z_out=fltarr(numstep)
+     IGM_corr=fltarr(numstep)
+     ;now loop and make the convolution      
+     for i=0, numstep-1 do begin
+        figm_readigmcalc, path+name[i], lam_out, trans_out, /noplot
+        ;get redshift
+        p=strpos(name[i],'_z')
+        p2=strpos(name[i],'_c')
+        z_out[i]=strmid(name[i],p+2,p2-p-2)
+ 
+        ;interpolate transmission
+        fine_trans=interpol(trans_out,lam_out,fine_lambda)
+        ;correct overshoot
+        ll=where(fine_lambda LT 912.6*(1+z_out[i]),nll)
+        la=where(fine_lambda GT 1215.6701*(1+z_out[i]),nla)
+        if(nll GT 0) then fine_trans[ll]=0.
+        if(nla GT 0) then fine_trans[la]=1.
+        if keyword_set(display) then begin
+           plot, fine_lambda, fine_trans, yrange=[-0.1,1.1], title=z_out[i]
+           oplot, fine_lambda, fine_Tfilter
+           wait, 0.5
+        endif
+        ;make intergal (this is correction not transmission)
+        igm_tra=TOTAL(fine_trans*fine_Tfilter*prec)/TOTAL(fine_Tfilter*prec)
+        if (igm_tra GT 0) then IGM_corr[i]=1./igm_tra ELSE IGM_corr[i]=1D30
+     endfor
+  endelse
+
+
+     ;save if told to do so
+  
+    if keyword_set(savename) then begin
+        comm="IGM correction for "+filter_tra+" using "+type
+        forprint, z_out, IGM_corr, textout=savename, comment=comm
+    endif
+    
+    if keyword_set(display) then plot, z_out, 2.5*ALOG10(IGM_corr), yrange=[0,20]
+    
+       
+end

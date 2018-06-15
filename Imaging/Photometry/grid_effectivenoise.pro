@@ -1,0 +1,192 @@
+;+
+;
+; Given an image and a corrisponding SExtractor segmentation map, this procedure
+; measure the empirical noise on the sky subtraced image taking into account the  
+; correlated noise. This is similar to effectivenoise, but uses a
+; regular grid rather than apertures. Much much faster and more robust.
+; The model is fit as the number of pixel in an aperture, rather than
+; as the radius.
+;
+; imgfits     the image to process
+; segmap      the segmentation map from sextractor
+; gain        the gain needed to get image in electron (default is 1)
+; exptime     the exposure time to get the image /per second (default is 1)
+; ext         the extention to open (default 0) 
+; plot        make a ps plot of the noise with the 'plot' name
+; mask        set to a good pixel mask to flag weird regions
+; wghext      extension where the weight map is (optional)
+; outmodel    return a 3 element array with noise properties [S1,alpha,beta]
+; sky         if set, a local sky model is computed and subtracted. 
+;             This should avoid a double-peak noise histogram.  
+; smoothsky   Subtract sky model after smoothing by smoothsky pixels
+;-
+
+pro grid_effectivenoise, imgfits, segmap, gain=gain, exptime=exptime,$
+                         ext=ext, plot=plot, mask_in=mask_in, wghext=wghext, outmodel=outmodel, $
+                         sky=sky, smoothsky=smoothsky
+                    
+
+;;make default
+if ~keyword_set(gain) then gain=1.
+if ~keyword_set(exptime) then exptime=1.
+if ~keyword_set(ext) then ext=0
+if ~keyword_set(smoothsky) then smoothsky=500.
+
+
+;;read sci fits and make it in e/s
+fits=mrdfits(imgfits,ext,head,/sil)
+fits=temporary(fits*gain/exptime)
+
+;;read segmentaion map
+segm=mrdfits(segmap,/sil)
+
+;;mask all the pixel with objects and put to 1 the
+;;segmap in order to get the effective area right
+obj=where(segm gt 0,nsg)
+if(nsg gt 0) then begin
+    fits[obj]=0.
+    segm[obj]=1.
+ endif
+
+mask=fits-fits+1
+if keyword_set(mask_in) then begin
+    mask_region, mask_in, mask
+    msk=where(mask eq 0)
+    fits[msk]=0.
+    segm[msk]=1.
+endif
+
+;; fix nans
+nan=where(finite(fits) lt 1)
+fits[nan]=0.0
+segm[nan]=1.
+
+if keyword_set(wghext) then begin
+    wei=mrdfits(imgfits,wghext,/sil)
+    wgh=where(wei eq 0)
+    fits[wgh]=0.
+    segm[wgh]=1.
+if keyword_set(mask_in) then mask[wgh]=0.
+    undefine, wei
+endif
+
+;xatv, fits, /bl
+;xatv, segm, /bl
+;xatv, mask, /bl
+;stop
+
+;;do sky model  
+if keyword_set(sky) then begin
+    splog, 'Compute sky model'
+    tmpsky=fits
+    tmpsky[where(tmpsky eq 0)]=median(tmpsky[where(tmpsky ne 0)])
+    ;;do a median filtering 
+    sky=smooth(tmpsky,smoothsky,/edge_wrap)
+    fits=temporary(fits-sky)
+    undefine, sky
+ endif else fits=temporary(fits-median(fits[where(fits ne 0)]))
+
+
+;;get image info and set minimum maximum apertures
+xsize=(size(fits))[1]
+ysize=(size(fits))[2]
+
+;;set a list of box
+minbox=2.  
+maxbox=10. 
+boxsize=mkarr(minbox,maxbox,1.)
+nsize=n_elements(boxsize)
+
+;;to store data
+meanrms=fltarr(nsize)
+
+if keyword_set(plot) then m_psopen, plot, /land
+
+;;loop over the boxes
+for bb=0, nsize-1 do begin
+    ;;do 10 realizations (~1/2 larger box) shift by one pixel each time
+    ;;to sample the full correlated pattern-increase statistic
+    for sh=0, 9 do begin
+    
+        sh_fits=shift(fits,sh)
+        sh_segm=shift(segm,sh)
+        
+        ;;rebin the image preseving total
+        bin_fits=frebin(fits,xsize/boxsize[bb],ysize/boxsize[bb],/total)
+        bin_segm=frebin(segm,xsize/boxsize[bb],ysize/boxsize[bb],/total)
+
+        ;if sh eq 0 then xatv, bin_fits, /bl
+        ;if sh eq 0 then xatv, bin_segm, /bl
+
+
+        ;;extract boxes without any contamination
+        ncont=1.
+        good=where(bin_segm lt ncont)
+
+        ;;store optimizing memory
+        undefine, sh_fits, sh_segm, bin_segm
+        if(sh eq 0) then boxlist=bin_fits[good] else boxlist=[boxlist,bin_fits[good]]
+        undefine, bin_fits
+    
+    endfor
+    
+    ;;compute stddev (usage of iter clipping agree with sextractor noise)
+    djs_iterstat, boxlist,  mean=mm, sigma=ss, mask=mask
+    ;;compare robust fitting 
+    robust_s=ROBUST_SIGMA(boxlist)
+    meanrms[bb]=ss              ;stddev(boxlist)
+    splog, 'Box ', boxsize[bb], ' has rms ', meanrms[bb], ' - Robust ', robust_s
+
+    if keyword_set(plot) then begin
+        ;;plot data
+        plothist, boxlist[where(mask gt 0)], bin=meanrms[bb]/5., xtitle='Flux (e-/s)', $
+          ytitle='Number',title=Textoidl('Box Size '+string(boxsize[bb],format='(F4.1)')+$
+                                         ' rms '+string(meanrms[bb],format='(F7.4)'))
+        ;;oplot model
+        a=randomn(seed,(size(boxlist[where(mask gt 0)]))[1])*meanrms[bb]
+        plothist, a+mm, /overplot, bin=meanrms[bb]/5., line=1, color=fsc_color("red")
+        erase
+    endif
+    undefine, boxlist, a
+endfor
+
+;;;get the rms in 1 pixel across the entire images
+djs_iterstat, fits[where(segm lt 1)],  mean=mm, sigma=ss, mask=mask ;;this has the wgh image already inside
+;;compare robust fitting 
+robust_1=ROBUST_SIGMA(fits[where(segm lt 1)])
+sigma1=ss 
+splog, "Rms 1 pix ", sigma1, " - Robust ", robust_1
+boxsize=[1.,boxsize]
+meanrms=[sigma1,meanrms]
+
+;;fit the model using the number of pixels
+logrms=alog10(meanrms)
+numpix=boxsize^2
+logsize=alog10(numpix)
+
+model=linfit(logsize,logrms,YFIT=myfit) 
+alpha=10^model[0]/sigma1
+splog, 'sigma_1', sigma1
+splog, 'alpha', alpha
+splog, 'beta', model[1]
+
+outmodel=[sigma1,alpha,model[1]]
+
+
+if keyword_set(plot) then begin
+;;now fit model of empirical noise
+    plot, numpix, meanrms, xtitle=Textoidl('num (pix)'), $
+      ytitle='rms (e/s)', /ylog, /xlog, psym=symcat(16), $model[1]
+      title='S1= '+string(sigma1)+' a= '+string(alpha)+' beta= '+string(model[1])
+    oplot, numpix, 10^myfit
+    ;;oplot gaussian noise and fully correlated noise
+    gnoise=sigma1*sqrt(numpix)
+    cnoise=sigma1*numpix
+    oplot, numpix, gnoise, line=1
+    oplot, numpix, cnoise, line=1
+    
+    m_psclose
+endif
+   
+ 
+end

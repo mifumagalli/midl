@@ -1,0 +1,50 @@
+lac3d
+-----
+
+3D version of van Dokkum's LA Cosmic bad pixel correction.
+
+This code uses Laplacian edge detection in exactly the same way as
+LACosmic. However, because it is designed to run of data cubes rather
+than images, there are a number of important differences in the
+overall procedure. An outline is given below.
+
+NOTES:
+
+It is best to use the internally generated noise cube (although this
+takes a long time to estimate). 
+
+The default values of s_lim=5 and f_lim=2 seem to work fine for the
+SINFONI cubes I have tested the routine on.
+
+It is best to remove any planes in the cube which have only NaN. This
+is quicker, and also allows for better correction at the edges of the
+cube (since they are wrapped round).
+
+PROCEDURE OUTLINE:
+
+Continuum sources (i.e. spectrally but not spatially extended) are
+traced and removed, using a 49 pixel median filter in the wavelength domain.
+
+The same is done for spatially but not spectrally extended sources
+(with a 7x7 median in the spatial plane).
+
+What's left is effectively the 'source cube' in which bad pixels will
+be identified and removed.
+
+The fine structure in this source cube is then mapped using a 3x3x3
+median. 
+
+The noise map is generated from the residual (after subtracting the
+fine structure) as the stddev of a pixels in a 5x5x5 box (after
+removing the highest 25 and lowest 25).
+
+Then the iterations for bad pixels start. At each iteration, bad
+pixels are identified in the source cube using the 3D Laplacian. They
+are replaced with those from the fine structure cube. 
+The fine structure and noise cubes are then updated. 
+The routine performs up to 5 iterations by default.
+
+At the end, the corrected source cube has the continuum & spatial
+structure added back in.
+
+---

@@ -1,0 +1,43 @@
+EAZY
+-----
+To run the photoz with eazy code follow this steps.
+
+First, make sure that the master.FILTER.RES.info and master.FILTER.RES
+is up to date. The most recent version is kept at ./filter
+Read the note NOTEONFILTER before using the filters.
+
+If you need to install a new filter in the list, make sure to take care of the 
+total transmission (filter+atmosphere+ccd).
+Use total_tarnsmission.pro which calls the gen_trans.py code provided in bpz.1.98b
+To install a new filter used addfilter.pro. Make sure to add the appropriate comments, 
+and number lines and AB-Vega conversion in master.FILTER.RES  master.FILTER.RES.info
+
+Once you are done with filters, generate an input file from an object structure
+using generate_catalogue.pro. Don't forget to set the parameters you want and the 
+translation file in the working directory. Then, type eazy.
+
+A comparison with sdss shows ok results using full combination of the eazy template.
+Eazy seems to not perform extremely well with the prior. Consider z_a. 
+
+
+
+BPZ
+----
+
+If you need to install a new filter, copy the file in /a/miki/CODES/bpz.1.98b/FILTER
+Remeber to set -NEW_AB yes the first time.
+
+To generate a catalogue use generate_catalogue.pro. Then add the name.columns 
+Consider z_b as final redshift, which include a bayes prior.
+
+ 
+
+
+
+
+
+
+
+
+
+

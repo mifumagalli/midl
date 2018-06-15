@@ -1,0 +1,44 @@
+;generate a cumulative distribution starting from number/deg^2
+;as in Grazian 2009
+
+
+;open data
+readcol, "grazian2009.dat", Uveg_gr, LogN_gr, LogN_MAX_gr, LogN_min_gr,$
+  compl_gr
+
+;covert in AB mag ad linear counts
+Uab_graz=Uveg_gr+0.86
+graz_linear=10^LogN_gr
+
+;convert in counts/arcsec
+N_graz=graz_linear/3600.^2
+
+!P.MULTI=[0,2,1]
+plot, Uab_graz, ALOG10(N_graz), xtitle="AB mag", ytitle="Lg cnt/asec^2/mag bin"
+
+
+;find cumulative distribution (mag are tabulated in bin of .25 mag)
+cnt_cumul_graz=fltarr(n_elements(LogN_gr))
+
+for ind=0, n_elements(LogN_gr)-1 do cnt_cumul_graz[ind]=total(N_graz[0:ind]*0.25)
+
+plot, Uab_graz, cnt_cumul_graz, xtitle="AB mag", ytitle="cnt/asec^2 cum"
+
+
+!P.MULTI=0
+
+
+;save output
+forprint, Uab_graz, cnt_cumul_graz, TEXTOUT="mag_cum_grazian.dat",$
+  COMMENT="Cumulative distribution from Grazian 2009 (cnt/arcsec^2-ABmag)"
+forprint, Uab_graz, N_graz, TEXTOUT="mag_grazian.dat",$
+  COMMENT="Differential distribution from Grazian 2009 (cnt/arcsec^2/mag-ABmag)"
+
+
+
+
+
+
+
+
+END

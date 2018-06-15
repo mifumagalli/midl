@@ -1,0 +1,143 @@
+;+
+;;procedure that gets a lbtc mosaic in inputs and makes a final fits
+;;for science data. For test flats and focus frame, just disply the
+;;image how it is and do not create any structure/mosaic.
+;
+;
+;
+;imagename  --> fits file as it comes from the telescope
+;imgstruc   --> if set to a variable, in output a structure with each
+;               chip+header 
+;mosaic     --> if set to a variable, in output a single array full mosaic
+;               (not included fractional rotation)
+;nodisplay  --> if keyword set, no xatv will be launched
+;save       --> if keyword set create fits file of mosaic and structure
+;redux      --> if set, display the image structure that as been
+;               processed by lbtc_ccdproc
+;layout     --> returns a structure with information on the data
+;               section, bias etc for the notrim image
+;notrim     --> if set, returns the mosaic with also postscan-prescan
+;               and align ccd (just for pipeline)   
+;
+;written by MF Sept 2009
+;-
+
+
+PRO lbtc_readfits, imagename, imgstruc=imgstruc, mosaic=mosaic, $
+                   nodisplay=nodisplay, save=save, redux=redux, $
+                   notrim=notrim, layout=layout, header=header
+
+
+;;here some ccd specific as September 2009
+;;relative position
+rel_pre=[0,49]
+rel_dat=[50,2097]
+rel_pos=[2098,2303]
+rel_y=[0,4607]
+rel_fuy=4608
+rel_fux=2304
+chip_fuy=4608
+chip_fux=2048
+;;with trim
+mosaicx=6292
+mosaicy=6731
+
+;;Derive absolute position
+layout={PREDATA:[0,0],DATA:[0,0],POSTDATA:[0,0],Y:[0,0]}
+layout=replicate(layout,4)
+for i=0L, 3 do begin
+    layout[i].predata=rel_pre+i*(rel_pre[1]-rel_pre[0]+1)
+    layout[i].data=rel_dat+3*(rel_pre[1]-rel_pre[0]+1)+i*(rel_dat[1]-rel_dat[0]+1)
+    layout[i].postdata=rel_pos+i*(rel_pos[1]-rel_pos[0]+1)+$
+      3*(rel_dat[1]-rel_dat[0]+1)+3*(rel_pre[1]-rel_pre[0]+1)
+    layout[i].y=rel_y
+endfor
+
+
+;;treat this as a raw image
+if ~keyword_set(redux) then begin
+
+;;check if science frame or focus
+    hed0=headfits(imagename,exten=0)
+    numext=sxpar(hed0,'NEXTEND')
+    if (numext eq 1) then begin
+        ;;no science (e.g. focus)
+        mosaic=mrdfits(imagename,1,/fscale)
+    endif else begin
+        ;;science
+        ;;set structure
+        fit=make_array(chip_fux,chip_fuy,/double)
+        pres=make_array(rel_pre[1]+1,chip_fuy,/double)
+        overs=make_array(rel_pos[1]-rel_pos[0]+1,chip_fuy,/double)
+        hea=make_array(1D4,/string)
+        imgstruc={header:hea,data:fit,prescan:pres,overscan:overs}  
+        imgstruc=replicate(imgstruc,5)
+        
+        ;;iterate over levels
+        for i=0, 4 do begin
+            ;;open file and load in structure
+            fits=mrdfits(imagename,i,hea,/silent,/fscale)
+            imgstruc[i].header=hea
+            if (i ne 0) then begin
+                imgstruc[i].data=fits[rel_dat[0]:rel_dat[1],0:chip_fuy-1]
+                imgstruc[i].prescan=fits[rel_pre[0]:rel_pre[1],0:chip_fuy-1]
+                imgstruc[i].overscan=fits[rel_pos[0]:rel_pos[1],0:chip_fuy-1]
+            endif
+        endfor
+    endelse 
+endif
+
+
+if keyword_set(redux) then begin
+    ;;treat this as a reduced image
+    
+    ;;open the header
+    fits=mrdfits(imagename,0,hea,/silent)
+    fit=make_array(chip_fux,chip_fuy,/float)
+    imgstruc={header:hea,data:fit}  
+    imgstruc=replicate(imgstruc,5)
+    
+    ;;get the chips
+    for i=1, 4 do imgstruc[i].data=fits[i-1,0:chip_fux-1,0:chip_fuy-1]
+    
+endif
+
+;;if trim, make compressed mosaic
+if not keyword_set(notrim) then begin
+    ;;create fits mosaic (6178*6673)
+    mosaic=make_array(mosaicx,mosaicy)
+    ;;fill in third chip
+    mosaic[0:2047,0:4607]=imgstruc[3].data
+    ;;fill in second chip, leaving 74 pixx for chip gap
+    mosaic[2122:4169,0:4607]=imgstruc[2].data
+    ;;fill in first chip, leaving 74 pixx for chip gap
+    mosaic[4244:6291,0:4607]=imgstruc[1].data
+    ;;rotate and fill in 4th chip,  leaving 75 pixy for chip gap
+    chip4=rotate(imgstruc[4].data,1)
+    mosaic[770:5377,4683:6730]=chip4
+endif else begin
+    ;;if not trim, keep full mosaic in place
+    mosaic=make_array(rel_fux*4,rel_fuy)
+    for i=0, 3 do begin
+        mosaic[layout[i].predata[0]:layout[i].predata[1],0:chip_fuy-1]=imgstruc[i+1].prescan
+        mosaic[layout[i].data[0]:layout[i].data[1],0:chip_fuy-1]=imgstruc[i+1].data
+        mosaic[layout[i].postdata[0]:layout[i].postdata[1],0:chip_fuy-1]=imgstruc[i+1].overscan
+    endfor
+endelse
+
+;;save
+if keyword_set(save) then begin
+    mosname="mos_"+imagename
+    strname="str_"+imagename
+    mwrfits, mosaic, mosname, imgstruc[0].header, /create
+    mwrfits, imgstruc, strname, /create
+endif
+
+;;display
+if ~keyword_set(nodisplay) then atv, mosaic ;;xatv has a bug with zoom
+
+;;before exit, set header in ext 0
+header=headfits(imagename,exten=0)
+
+
+end

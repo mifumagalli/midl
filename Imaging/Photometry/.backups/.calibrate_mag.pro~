@@ -1,0 +1,74 @@
+;this procedure takes a file and apply a photometric calibration
+;the file as to be formatted in the following way
+;
+;Second line, the photometric calibration. Put 0 if missing terms 
+;
+;Third line, information regarding the object (airmass and position+filter
+;for dust extinction)
+;
+;It follows the list of object:  ID   MAG   ERRMAG   MAGCLR1  MAGCLR2 
+;where the last two columns are for the mag to be used if color term
+;is present  MAGCLR1-MAGCLR2
+;
+;Here it is an example:
+;--------------------------------------
+;ZP    errZP    AM    errAM  CLR   errCLR
+;AIRMASS   RA    DEC  FILTER
+;ID    MAG   MAGERR   MAGCLR1  MAGCLR2 
+;...    ...   ...       ...      ...
+;
+;
+;The extinction is computed using standard extinction laws and
+;Schlegel dust map.
+;Fluxes are computed assuming AB magnitude system
+;
+;
+;
+
+PRO calibrate_mag, fileinfo
+
+;read calibration info
+readcol, fileinfo, ZP, errZP, AM, errAM, CLR, errCLR, numline=1
+
+;read object info
+readcol, fileinfo, AIRMASS, RA, DEC, FILTER, skipline=2, numline=1, $
+  format='F,A,A,A'
+
+;read flux
+readcol, fileinfo, ID, MAG, MAGERR, MAGCLR1, MAGCLR2,  skipline=3, $
+  format='A,F,F,F,F'
+
+;create colors 
+colors=MAGCLR1-MAGCLR2
+
+;calibrate
+MAG_calib=MAG-AM*AIRMASS-CLR*colors+ZP
+MAG_error_cal=sqrt(errZP^2+(errCLR*colors)^2+MAGERR^2+(errAM*AIRMASS)^2)
+
+;compute the signal to noise (SexTrac formula)
+SN=1.0857/MAGERR                ;this is the SN of the detection
+SN_cal=1.0857/MAG_error_cal     ;this is the SN that accounts for calibration error
+
+
+;correct for galactic extinction
+ebv=ebv_dust(ra,dec,a=Aext,band=filter)
+MAG_calib=MAG_calib-Aext
+
+
+;find flux under AB mag assumption
+Flux=10^(-0.4*(MAG_calib+48.6))
+
+
+;find error with S/N (this is a bit sloppy, since the error
+; is supose to be symmetric on the flux and asymmetric on the mag, but
+; in this case has been computed directly on the mag)
+FluxErr=Flux/SN_cal
+
+;print output to a file
+
+fileout='calibrated_'+fileinfo
+forprint, ID, MAG_calib, MAG_error_cal, SN, Flux, FluxErr, FORMAT="A,F,F,F,E,E", /SILENT,$ 
+          COMMENT="ID,Mag,ErrMag,SN,Flux,ErrFLux", TEXTOUT=fileout
+
+
+end

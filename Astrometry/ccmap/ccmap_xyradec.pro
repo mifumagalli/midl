@@ -1,0 +1,107 @@
+;+
+;    
+;  This is a script that prepares all you need to run ccmap in iraf
+;  It is interactive
+;
+;
+;  filelist  --> list of files with same reference 
+;  reference --> fits file with reference image
+;  norefreg  --> skip the step in which you save reference region.
+;
+;
+;
+;-
+
+pro ccdmap_ref_region, refimg, infimg
+
+splog, "Mark and save reference apertures"
+
+;;drive ds9 
+spawn, 'ds9 -width 1500 -height 1000 -region save '+refimg+'.reg -zscale '+refimg+$
+  ' -frame new -zscale '+infimg+$
+  ' -single -zoom 0.5 -match frames wcs -region format xy'
+
+end
+
+
+pro ccdmap_img_region,  refimg, infimg
+
+refreg=refimg+'.reg'
+
+
+;;overplot first guees of regions
+;;load images
+headref=headfits(refimg) 
+headfit=headfits(infimg) 
+;;regions
+region_ref=refimg+'.reg'
+region_fit=infimg+'.reg'
+;;load regions
+readcol, region_ref, xref, yref
+xyxy, headref, headfit, xref, yref, xfit, yfit
+forprint, xfit, yfit, textout=region_fit, /nocom, /sil
+
+splog, "Mark and save image apertures"
+
+;;drive ds9 
+spawn, 'ds9 -width 1500 -height 1000  -region format xy -zscale '+refimg+$
+  ' -regions load '+region_ref+' -frame new -zscale '+infimg+$
+  ' -regions load '+region_fit+' -single -zoom 0.5 -match frames wcs'
+
+end
+
+
+pro match_region, refimg, infimg
+
+;;load images
+reffits=mrdfits(refimg,0,headref,/sil) 
+fitfits=mrdfits(infimg,0,headfit,/sil) 
+
+;;regions
+region_ref=refimg+'.reg'
+region_fit=infimg+'.reg'
+
+;;get astro
+extast, headref, refast
+
+;;load regions
+readcol, region_fit, x_fit, y_fit, /sil
+readcol, region_ref, x_ref, y_ref, /sil
+
+;;centroid
+djs_photcen, x_fit, y_fit, fitfits
+djs_photcen, x_ref, y_ref, reffits
+
+;;astro
+xy2ad, x_ref, y_ref, refast, ra_img, dec_img
+forprint,  x_fit, y_fit, ra_img, dec_img, textout='xy_'+infimg, /nocomm, /sil
+
+end
+
+
+pro ccmap_xyradec, filelist, reference, norefreg=norefreg
+
+;;read
+readcol, filelist, name, format='A'
+nfile=n_elements(name)
+
+;;go for reference 
+if ~keyword_set(norefreg) then ccdmap_ref_region, reference, name[0]
+
+;;generate the cl scrip
+openw, lun, filelist+'.cl', /get_lun
+
+;;now do all the images
+for i=0, nfile-1 do begin
+    ;;find regions
+    ccdmap_img_region, reference, name[i]
+    ;;match regions
+    match_region, reference, name[i]
+    ;;update cl script
+    printf, lun, 'ccmap ( "xy_'+name[i]+'","out_'+name[i]+'", solutio="sol_'+name[i]+'", images="'+name[i]+'")'
+endfor
+
+free_lun, lun
+
+
+end

@@ -1,0 +1,181 @@
+;Procedure that gives back the Sheth-Tormen mass function (2002)
+;using the numerical approximation quoted in the Bolshoi paper 
+;(in its ArXiv version; Klypin et al., 2010, sub ApJ).
+;This numerical approximation as been derived with the 
+;cosmological parameters used in Bolshoi. 
+;This expression is accurate within 2% for M > 10^7 h^-1 Msun
+;
+;
+;
+
+;;;;-----------------------------
+;;;;   Utility function that gives the value of delta_a and sigma mass
+;;;;--------------------------------
+pro sigma_delta, a_exp, halomass, sigma_m, delta_a, _extra=extra, silent=silent
+
+;; Initialize the common block
+common cosmolgy_cmmn, cosm_dm, cosm_k, cosm_h, cosm_l, cosm_r
+m_cosm_common, silent=silent, _extra=extra
+
+;the growth factor (approximation valid for omega_m > 0.1)
+x_Da=a_exp*(cosm_l/cosm_dm)^(1./3)
+omega_m_Da=cosm_dm/(1+x_Da^3)
+omega_l_Da=1-omega_m_Da
+Da=(5.*a_exp*omega_m_Da/2.)/(omega_m_Da^(4./7)-$
+   omega_l_Da+(1+0.5*omega_m_Da)*(1+omega_l_Da/70.))
+
+x_Da_zero=(cosm_l/cosm_dm)^(1./3)
+omega_m_Da_zero=cosm_dm/(1+x_Da_zero^3)
+omega_l_Da_zero=1-omega_m_Da_zero
+D_zero=(5.*omega_m_Da_zero/2.)/(omega_m_Da_zero^(4./7)-$
+      omega_l_Da_zero+(1+0.5*omega_m_Da_zero)*(1+omega_l_Da_zero/70.))
+
+;overdensity parameter
+delta_a=Da/D_zero
+
+
+;Now define sigma(mass)
+;----------------------------------------------
+y_sig=1D12/halomass
+;The following numerical approximation holds only for Bolshoi
+;cosmological parameters:
+sigma_zero=(16.9*y_sig^0.41)/(1+1.102*y_sig^0.20+6.22*y_sig^0.333)
+sigma_m=delta_a*sigma_zero
+
+end
+
+
+
+;;---------------------------------------------------------
+;core_shethtormen-> This is used to evaluate the main argument of the 
+;ST function
+;----------------------------------------------------------------
+
+;;this defines the core function
+; halomass      --> input, halo mass (Msun h-1)
+; numberdens    --> output, number density  (h^-1 Mpc)^-3
+; redhsift      --> the redshift to evaluate at
+; EXTRA         --> parameters allowed by common cosmo
+; ps            --> If set, a Press-Schecter is used (default Sheth Tormen)
+; cbols          --> If set, correct the ST according to the Bolshoi result
+
+
+pro core_shethtormen, halomass, numberdens, redshift,$
+                 ps=ps, cbols=cbols, _extra=extra, silent=silent
+
+;; Initialize the common block
+common cosmolgy_cmmn, cosm_dm, cosm_k, cosm_h, cosm_l, cosm_r
+m_cosm_common, silent=silent, _extra=extra
+
+
+;;define parameters for ST function
+;------------------------------------
+if keyword_set(ps) then begin
+;define a Press-Schecter
+Ast=0.5
+pst=0.
+bst=1.
+endif else begin
+;define a Sheth-Tormen
+Ast=0.322
+pst=0.3
+bst=0.707
+endelse
+
+
+;;define some cosmological stuff
+;--------------------------------------
+;expansion factor
+a_exp=1./(1+redshift)
+;critical density
+rho_crit0=2.75D11 ;(h^-1 Mpc)^-3
+;density matter
+rho_mz=rho_crit0*cosm_dm*a_exp^3
+;overdensity for spherical collapse
+delta_sc=1.686*(1+redshift)
+
+;evaluate sigma and delta
+sigma_delta, a_exp, halomass, sigma_m, delta_a, _extra=extra, silent=silent
+
+;Now define the Sheth Tormen function
+;----------------------------------------
+nu=(delta_sc/sigma_m)^2
+nu_fnu=(Ast/sqrt(!PI))*(1+(bst*nu)^(-pst))*(bst*nu*0.5)^0.5*exp(-bst*nu*0.5)
+
+;Finally, the density (without d sigma/d m)
+;------------------------------------------
+numberdens=(2*rho_mz*nu_fnu)/(halomass*sigma_m)
+
+;If needed correct for bolshoi
+;---------------------------------
+if keyword_set(cbols) then begin
+bol_corr=(5.501*delta_a)^4/(1+(5.500*delta_a)^4)
+numberdens=bol_corr*numberdens
+endif
+
+end
+
+
+
+
+;;---------------------------------------------------------
+;Real main function that builds the distribution
+;
+;--------------------------------------------------------
+; rangemass      --> input, range of halo mass log (Msun h-1) [min,max]
+; nmassz         --> output, number density  (h^-1 Mpc)^-3
+; basemass       --> output, the mass base
+; redhsift       --> the redshift to evaluate at
+; binmass        --> the bin in mass (log)
+; EXTRA          --> parameters allowed by common cosmo
+; bolsh_correct  --> allows for correction as in Bolshoi paper 
+;                    This is needed at high redshift  
+; ps             --> If set, a Press-Schecter is used (default Sheth Tormen)
+; cbols          --> If set, correct the ST according to the Bolshoi result
+
+
+
+pro shethtormen, rangemass, nmassz, basemass, redshift, binmass=binmass,$
+                 ps=ps, cbols=bols, _extra=extra, silent=silent
+
+;set default
+if ~keyword_set(binmass) then binmass=0.0001
+
+
+
+;define array of mass using logaritmic bins 
+;Shift by 0.5 to get centarl value
+basemass=mkarr(rangemass[0],rangemass[1],binmass)+0.5*binmass
+base10_mass=10^basemass
+
+;evaluate core function (needs base10)
+core_shethtormen, base10_mass, numberdens, redshift,$
+  ps=ps, cbols=cbols, _extra=extra, silent=silent
+
+;evaluate the derivative d sigma/d m
+
+;add an extra bin to have right side 
+mass_limit=mkarr(rangemass[0],rangemass[1]+binmass,binmass)
+mass_limit=10^mass_limit
+
+;evaluate sigma
+a_exp=1/(1+redshift)
+sigma_delta, a_exp, mass_limit, sigma_m, delta_a, _extra=extra, silent=silent
+
+;get derivative (apply minus sign)
+dsigma=(shift(sigma_m,-1)-sigma_m)
+dm=(shift(mass_limit,-1)-mass_limit)
+dsigmadm=-dsigma/dm
+
+;drop last element
+dsigmadm=dsigmadm[0:n_elements(dsigmadm)-2]
+
+
+;get final distribution
+nmassz=dsigmadm*numberdens
+
+
+plot, basemass, nmassz, /ylog
+
+
+end

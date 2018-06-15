@@ -1,0 +1,54 @@
+The following package contains all the material you need to 
+compute the IGM transmission for a given redshift and filter 
+transmission curve
+
+Instruction and notes of each procedure are in the headers of
+the programs.
+
+
+**************************
+figm_calculator.cpp
+fnhi_prochaska09.dat
+**************************
+C++ code to compute the IGM transmission over a grid of redshift 
+for an input file f(NHI,X) (fnhi_prochaska09.dat).
+The code compute f(NH,z) and integrate over a range of column density 
+and redshift for 35 line in the Lyman series. 
+
+
+**************************
+read_madau95.pro
+madau95_igm.dat
+**************************
+Procedure that reads the IGM transmission from Madau 1995 (madau95_igm.dat).
+Returns observed lambda (AA), tau and IGM transmission for a given
+redshift. Redshifts allowed are from 0 to 10 in step of 0.2.
+
+
+**************************
+figm_readigmcalc.pro
+**************************
+Procedure that reads the  binary file from figm_calculator
+and computes the IGM transmission.
+Returns observed lambda (AA) and IGM transmission for a given
+redshift. 
+
+************************
+figm_grid.pro
+************************
+Reads a grid of trasmission (either Madau 95 or Prochaska 09)
+and compute the IGM corrections for broad band photometry in a filter 
+provided by the user.
+
+
+
+************************
+figm_correction.pro (idl path)
+************************
+Extract the IGM correction at the given redshift using tabulated 
+values computed with figm_grid.pro
+
+
+
+INCLUDES: mkarr.pro
+

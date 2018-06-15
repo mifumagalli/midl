@@ -1,0 +1,13 @@
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;Compute D(a)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+function dz, z
+common cos, omm,oml,h,sigma8,signorm,rho0
+omz=ommz(z)
+olz=omlz(z)
+gz=2.5*omz/(omz^(4./7.)-olz+(1.+omz/2.)*(1.+olz/70.))
+g0=2.5*omm/(omm^(4./7.)-oml+(1.+omm/2.)*(1.+oml/70.))
+dz=gz/(g0*(1.+z))
+return, dz
+end

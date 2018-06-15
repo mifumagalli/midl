@@ -1,0 +1,85 @@
+;+
+;function that returns the limit magnitude at a given signal to noise
+;
+;
+;sky_sigma    --> Input, the sky sigma for electrons
+;fwhm         --> The FWHM to consider for the aperture (diameter) (arcsec)
+;pscale       --> The plate scale of the image(if not set, default 1)
+;zp=zp        --> The ZP for the calibration (if not set, default 25)
+;SN=SN        --> The desired SN (if not set, 3sigma)
+;texp=texp    --> The exp time of the image (the effective one, i.e. 1
+;                 sec if image is in e-/s)
+;point=point  --> If set, thake a PSF of 2/3 FWHM, if not take an
+;                 aperture of 0.5*FWHM in radius
+;fits         --> if set to a name of a fits file, the sky sigma is
+;                 computed on the image, using sigma clipping (crude!!!)
+;cut          --> if want, set to a subset of the image [x0,x1,y0,y1]
+;model        --> array [alpha,beta] to correct for correlated noise
+;                 sigma=sky_sigma*alpha*Npix^beta 
+;
+;-
+
+
+function limit_mag, sky_sigma, fwhm=fwhm, pscale=pscale, zp=zp,$
+                    SN=SN, texp=texp, point=point, fits=fits, cut=cut, $
+                    model=model
+
+;;work on image
+if keyword_set(fits) then begin
+    image=mrdfits(fits,0,header)
+    if keyword_set(cut) then image=image[cut[0]:cut[1],cut[2]:cut[3]] 
+    djs_iterstat, image, maxiter=20, mean=mean_img, median=med_img, sigma=sky_sigma
+    splog, 'Sky mean/sigma: ', mean_img, ' +/- ', sky_sigma
+endif
+
+
+
+;;optional stuff
+if ~keyword_set(texp) then begin
+    texp=1.
+    splog, 'Set exposure time to 1 sec'
+endif
+
+if ~keyword_set(SN) then begin
+    SN=3.
+    splog, 'Set SN to 3'
+endif
+
+if ~keyword_set(ZP) then begin
+    ZP=25.
+    splog, 'Set ZP to 25'
+endif
+
+if ~keyword_set(PSCALE) then begin
+    PSCALE=1.
+    splog, 'Set PSCALE to 1'
+endif
+
+
+
+;;set the aperture
+if keyword_set(point) then begin
+    radius=2./3.*FWHM/PSCALE
+    npixel=!PI*(2./3.*FWHM/PSCALE)^2 
+    area=!PI*(2./3.*FWHM)^2
+    splog, 'Radius set to ', 2./3.*FWHM, ' arcsec'
+endif else begin
+    radius=FWHM*0.5/PSCALE
+    npixel=!PI*(FWHM*0.5/PSCALE)^2 
+    area=!PI*(FWHM*0.5)^2 
+    splog, 'Radius set to ', FWHM*0.5, ' arcsec'
+endelse
+
+;;compute effective noise 
+if keyword_set(model) then begin
+effective_noise=sky_sigma*model[0]*(npixel^model[1])
+mag=zp-2.5*alog10(SN*effective_noise/texp)
+endif else begin
+mag=zp-2.5*alog10(SN*sqrt(npixel)*sky_sigma/texp)
+splog, 'Surface Brightness: ', zp-2.5*alog10(SN*sky_sigma/texp)+5*alog10(PSCALE)
+endelse
+
+return, mag
+
+
+end

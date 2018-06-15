@@ -1,0 +1,50 @@
+;;procedure that for a given ROTATOR position, make the frame
+;
+;                  N
+;                  ^
+;                  |        This is tested for LRIS geometry 
+;                  |        after the RED upgrade 
+;            E <----        Write on 21/01/2010
+;
+;
+;
+;
+
+
+pro img_lris_rotate, fits, fits_rot, rotpos
+
+  ;take out the artificial -90
+  pa_real=rotpos+90
+
+  splog, 'Frame orientation PA ', pa_real
+
+
+   ;make this always positive
+  if(pa_real lt 0) then pa_real=360+pa_real
+
+   
+   ;get the multiple of 90 you have to rotate for
+   rot_ang=round(pa_real/90.)
+   
+   ;make the rotation counterclockwise
+   rot_ang=4-rot_ang
+
+   ;make the 360 angle a 0
+   if(rot_ang eq 4) then rot_ang=0
+
+   ;take out an extra  90 degrees
+   rot_ang=rot_ang+1
+   if(rot_ang eq 4) then rot_ang=0
+
+   splog, 'Rotate by ', rot_ang*90.
+
+  ;make the rotation
+   fits_rot=rotate(fits,rot_ang)
+   
+   ;final reverse the X axis 
+   splog, 'Flip X axis'
+   fits_rot=reverse(fits_rot)  
+
+
+end
+

@@ -1,0 +1,63 @@
+;+
+; This code fits profiles to the sky lines in a master sky
+;
+; mastersky   -> input sky 
+; save        -> output fits in structure/ps file - so give onyl rootname  
+; skylambda   -> return fitted sky centroid 
+;-
+
+pro muse_fitlsf, mastersky, save=save, skylambda=skylambda
+  
+  ;;load sky 
+  sky=mrdfits(mastersky,1)
+  
+  ;x_specplot, sky.MASTERSKY_FLUX, wav=sky.MASTERSKY_WAVE
+
+  ;;set the sky line  
+  linelist = 1d*[5577.339,6300.304,6363.776,6533.01,6978.4473,$
+              7438.41,7993.343,8399.202,8430.215,8885.914,8919.696]
+  
+  
+  
+  ;;linelist = [5577.339,6300.304,6363.776,7993.343,8399.202,8430.215,8885.914,8919.696]
+  
+  ;;prepare 
+  Nlines = n_elements(linelist)
+  linesigma = dblarr(Nlines)
+  
+  dataspec=sky.MASTERSKY_FLUX
+  lambdaspec=sky.MASTERSKY_WAVE
+  
+  m_psopen, save, /land
+
+  for i=0, Nlines-1 do begin
+     fitind = where(lambdaspec gt linelist[i]-7 and lambdaspec le linelist[i]+7, Nfit)
+     fit = mpfitpeak(lambdaspec[fitind], dataspec[fitind],$
+                     estimates=[2000.D,double(linelist[i]),1.D,0.D], A, Nterms=4, /nan)
+     linesigma[i] = A[2]
+     linelist[i] = A[1]
+
+     plot, lambdaspec[fitind], dataspec[fitind], psym=1, title='Lambda (A) = '+rstring(linelist[i]), $
+           xtitle='sigma (A) = '+rstring(A[2])
+     oplot, lambdaspec[fitind], fit, line=1, color=fsc_color('red')
+     
+  endfor
+
+  
+  plot, linelist, linelist/(linesigma*2.35482), xtitle='Lambda', ytitle='Lambda / FWHM', psym=1, /ynozero
+
+  oplot, [6562.82]*(1+0.01555), [2611.9], psym=1, color=fsc_color('red')
+
+  plot, linelist, (linesigma*2.35482)/linelist*299792.458, xtitle='Lambda', $
+        ytitle='sigma km/s', psym=1, /ynozero
+  oplot, [6562.82]*(1+0.01555), [299792.458/2611.9], psym=1, color=fsc_color('red')
+
+
+  m_psclose
+
+  ;;set return 
+  skylambda=linelist
+  
+
+
+end 

@@ -1,0 +1,37 @@
+;this procedure displays a 2d spectrum that comes out of xidl
+;long_reduce. 
+;The wave image is reconstructed from one trace that oyu can specify.
+;If not, it takes the brightest one.
+
+
+
+;fitsimg  -> the reduce science frame
+;trace    -> the trace to consider for the wave (number, not array index)
+;imgout   --> in output, the image
+
+pro disp2dspec, fitsimg, trace, imgout=imgout
+
+
+;open image
+img=mrdfits(fitsimg,0)
+sky=mrdfits(fitsimg,2)
+
+;open the structure
+str=mrdfits(fitsimg,5)
+
+if keyword_set(trace) then lambda=str[trace-1].WAVE_OPT $
+else begin
+    max_flu=where(str.peakflux eq max(str.peakflux))
+    lambda=str[max_flu].WAVE_OPT
+endelse
+
+;make wave img
+wav=lambda ## replicate(1.,n_elements(img[*,0]))
+
+
+;displ
+imgout=img-sky
+xatv, imgout, wvimg=wav
+
+
+end

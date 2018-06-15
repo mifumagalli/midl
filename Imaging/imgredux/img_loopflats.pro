@@ -1,0 +1,179 @@
+;+
+;Procedure called by img_makeflats that does the dirty job of
+;creating the flats
+;
+;instr     --> the instrument used
+;name      --> list of images name with the flats to use
+;bias      --> the median bias from makebias if it exists
+;MINMAX    --> array of min and max value to esclude faint or saturated flats  
+;flat_chip --> as output, retunr the final flat 
+;
+;-
+
+
+pro img_loopflats, name, flat_chip, bias=bias, minmax=minmax, path=path, instr=instr
+  
+  common ccdinfo, xfull,yfull,nchip,namp,biaslev,satur,goodata
+  
+  ;;make storage for final mean flat
+  nfilt=n_elements(name)
+  flat1=make_array(nfilt,xfull,yfull,/float)
+  ;;no good
+  dump=0
+  current=nfilt
+  
+  ;;now loop over all the images
+  for img=0, nfilt-1 do begin
+     
+     ;;open
+     splog, "Working on image ", name[img]  
+     
+     ;;this is telescope dependent
+     if(instr eq 'LRIS') then begin
+        head=headfits(path+strtrim(name[img],2),exten=0)
+        date=fxpar(head,"DATE")
+        if(date gt '2009-04-01') then chips=lris_readfits(path+strtrim(name[img],2),header=hea,/notrim,layout=layout)
+        if(date lt '2009-04-01') then chips=lris_readold(path+strtrim(name[img],2),header=hea,layout=layout)
+     endif
+     if(instr eq 'LRISr') then chips=lris_readold(path+strtrim(name[img],2),header=hea,layout=layout)
+     if(instr eq 'LBC') then lbtc_readfits,path+strtrim(name[img],2),mosaic=chips,/notrim,layout=layout,/nodisp
+     if(instr eq 'ESI') then chips=esi_readfits(path+strtrim(name[img],2),header=hea,layout=layout)
+     if(instr eq 'FEINC') then chips=feinc_readfits(path+strtrim(name[img],2),header=hea,layout=layout)
+     if(instr eq 'IMACS') then chips=imacs_readfits(path+strtrim(name[img],2),layout=layout)
+     
+     ;;check if bright enough or saturated (look at 1 random square region) 
+     edgx0=0.5*xfull-0.2*xfull
+     edgx1=0.5*xfull+0.2*xfull
+     edgy0=0.5*yfull-0.2*yfull
+     edgy1=0.5*yfull+0.2*yfull
+     if(edgx0 lt 0) then edgx0=0
+     if(edgy0 lt 0) then edgy0=0
+     if(edgx1 gt (size(chips))[1]-1) then edgx1=(size(chips))[1]-1
+     if(edgy1 gt (size(chips))[2]-1) then edgy1=(size(chips))[2]-1
+     medbox=djs_median(chips[edgx0:edgx1,edgy0:edgy1])
+     
+     
+     if(medbox lt minmax[1] and medbox gt minmax[0]) then begin
+        
+        ;;go for oscan subtraction
+        img_oscan, chips, imageout, layout=layout, instr=instr
+        
+        ;;remove zero
+        if keyword_set(bias) then begin
+           splog, 'Sub bias...'
+           imageout=imageout-bias
+        endif  
+        
+        outimage=imageout-imageout-1.
+        
+        ;;normalise each amplifier by itself This is instrument 
+        ;;dependent
+        
+        for amp=0, namp-1 do begin
+           
+           if(instr eq 'LRIS' or instr eq 'LRISr') then begin
+              xs=1024*amp
+              xe=1024*(amp+1)-1
+              if(xs LT goodata[0]) then xs=goodata[0]
+              if(xe GT goodata[1]) then xe=goodata[1]
+              ;;get rid of vignetting in y direction
+              ys=goodata[2]
+              ye=goodata[3]
+           endif
+           if(instr eq 'LBC') then begin
+              if(amp eq 0) then begin
+                 xs=0
+                 xe=2047
+                 ys=0
+                 ye=4607
+              endif 
+              if(amp eq 1) then begin
+                 xs=2122
+                 xe=4169
+                 ys=0
+                 ye=4607
+              endif 
+              if(amp eq 2) then begin
+                 xs=4244
+                 xe=6291
+                 ys=0
+                 ye=4607
+              endif 
+              if(amp eq 3) then begin
+                 xs=770
+                 xe=5377
+                 ys=4683
+                 ye=6730
+              endif 
+           endif
+           if(instr eq 'ESI') then begin
+              if(amp eq 0) then begin
+                 xs=24
+                 xe=897
+                 if(xs LT goodata[0]) then xs=goodata[0]
+                 if(xe GT goodata[1]) then xe=goodata[1]
+                 ;;get rid of vignetting in y direction
+                 ys=goodata[2]
+                 ye=goodata[3]
+              endif 
+              if(amp eq 1) then begin
+                 xs=898 < goodata[1]
+                 xe=1123
+                 if(xs LT goodata[0]) then xs=goodata[0]
+                 if(xe GT goodata[1]) then xe=goodata[1]
+                 ;;get rid of vignetting in y direction
+                 ys=goodata[2]
+                 ye=goodata[3]
+              endif
+           endif
+           if(instr eq 'FEINC') then begin
+              xs=0
+              xe=1023
+              if(xs LT goodata[0]) then xs=goodata[0]
+              if(xe GT goodata[1]) then xe=goodata[1]
+              ;;get rid of vignetting in y direction
+              ys=goodata[2]
+              ye=goodata[3]
+           endif
+           if(instr eq 'IMACS') then begin
+              
+              ;;set the y
+              ymin=0
+              ymax=4095
+              
+              ;;find position 
+              if(amp le 3) then begin
+                 ys=ymin
+                 ye=ymax
+                 xs=8192-(amp+1)*2048
+                 xe=8191-amp*2048
+              endif else begin 
+                 ys=ymin+ymax+1
+                 ye=ymax*2+1
+                 xs=8192-(amp-4+1)*2048
+                 xe=8191-(amp-4)*2048
+              endelse
+           endif
+           
+           outimage[xs:xe,ys:ye]=imageout[xs:xe,ys:ye]/djs_median(imageout[xs:xe,ys:ye])
+           
+        endfor
+        
+        ;;store chip after normalisation 
+        flat1[img-dump,0:xfull-1,0:yfull-1]=outimage[0:xfull-1,0:yfull-1]
+        
+     endif else begin
+        ;;take out spot for saturated image
+        splog, "Dump flat ",  name[img]
+        dump=dump+1
+        flat1=reform(flat1[0:current-2,0:xfull-1,0:yfull-1])
+        current=current-1
+     endelse
+     
+  endfor
+  
+  ;;here stack them with a median to take out stars
+  flat_chip=djs_median(flat1,1)
+  
+  
+END

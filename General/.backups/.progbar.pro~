@@ -1,0 +1,27 @@
+PRO progbar, percent, length=length
+
+
+
+length = (keyword_set(length))?length:40
+per = percent/100.0
+
+less = (floor(per*length)     eq 0)? '' : replicate('+', floor(per * length))
+grea = (ceil ((1-per)*length) eq 0)? '' : replicate('-', ceil( (1-per)*length ))
+bar = strmid(strjoin([less,grea]),0,length)
+
+print, format='(%"' + bar + ' [' + strtrim(long(per*100.0),2) + '\%]\r",$)'
+
+
+END
+
+
+pro test_progbar
+
+for i=0,100 do begin
+	progbar, i
+	wait, 0.05
+endfor
+
+print
+
+end

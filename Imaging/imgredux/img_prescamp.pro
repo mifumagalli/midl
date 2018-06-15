@@ -1,0 +1,400 @@
+;+
+; 
+;  This procedure prepare each image to be processed by scamp.
+;  What it does:
+;   
+;        -compute orientation to the frame to have it NE oriented
+;        -fit a crude astrometric solution as first guess used by scamp
+;        -update the header with relevant info for scamp 
+;        -write the mosai as multi-extension image
+;
+; 
+;
+;
+;-
+
+pro img_prescamp, sci, wgt, header, instr=instr,$
+                  filter=filter, object=object, filename=filename,$
+                  path=path, idgroup=idgroup, nophot=nophot, side=side, $
+                  sdss=sdss, deltawcs=deltawcs
+  
+
+common ccdinfo, xfull,yfull,nchip,namp,biaslev,satur, goodata
+
+
+;;obtain all the information that are instrument dependent
+if(instr eq 'LRIS') then begin
+
+   ;;define astro ralated stuff
+   rotpos=fxpar(header,"ROTPOSN")
+   ra=fxpar(header,"RA")      ;;in hhmmss
+   dec=fxpar(header,"DEC")    ;;in ddmmss
+   date=fxpar(header,"DATE")
+
+   x_radec, ra, dec, rag, deg
+   if keyword_set(deltawcs) then begin
+      
+      x_radec, ra, dec, rag-deltawcs[0]/3600., deg+deltawcs[1]/3600., /flip
+      x_radec, ra, dec, rag, deg
+      
+   endif
+   
+   pixscale=0.135        
+   xpix=4096
+   ypix=4096 
+   
+   ;;define number of extension and limit of the 2 ccd
+   next=2
+   xlim=[[0,2047],[2048,4095]]
+   ylim=[[0,4095],[0,4095]]
+      
+   ;;define pointing center 
+   xcenter=xpix/2.
+   ycenter=ypix/2.
+   
+   ;;bring frame NE and prepare to split the ccd
+   img_lris_rotate, sci, wgt, rotpos, xlim, ylim, header=header, rot_ang=rot_ang
+   
+   ;;define info 
+   airmass=fxpar(header,"AIRMASS")
+
+   if(date ge '2013-01-01') then begin
+      if(side eq 'R') then rdnoise=4.6 else rdnoise=3.6
+   endif else begin
+      if(side eq 'R') then rdnoise=4. else rdnoise=3.6
+   endelse
+      
+
+   phzp=27.6  ;;ok for all the filters
+   
+   ;;clean header 
+   sxdelpar, header, "AMPPSIZE"
+   sxdelpar, header, "DETLSIZE"
+   
+   ;;set wcs 
+   CD1_1   =   -3.75E-05                               
+   CD2_1   =    0.0
+   CD1_2   =    0.0
+   CD2_2   =    3.75E-05
+   
+endif
+
+;;obtain all the information that are instrument dependent
+if(instr eq 'LRISr') then begin
+
+   ;;define astro ralated stuff
+    rotpos=fxpar(header,"ROTPOSN")+90
+    ra=fxpar(header,"RA")    ;;in hhmmss
+    dec=fxpar(header,"DEC")  ;;in ddmmss
+   
+    x_radec, ra, dec, rag, deg
+    if keyword_set(deltawcs) then begin
+       x_radec, ra, dec, rag-deltawcs[0]/3600., deg+deltawcs[1]/3600., /flip
+       x_radec, ra, dec, rag, deg
+    endif
+
+    pixscale=0.211  ;;old detector before Jun2009 update
+    xpix=2048
+    ypix=2048 
+    
+    ;;define number of extension and limit of the 2 ccd
+    next=1
+    xlim=[[0,2047]]
+    ylim=[[0,2047]]
+
+    ;;define pointing center
+    xcenter=xpix/2.
+    ycenter=ypix/2.
+
+    ;;bring frame NE and prepare to split the ccd
+    img_lris_rotate, sci, wgt, rotpos, xlim, ylim, header=header, /noflip
+    
+    ;;define info 
+    airmass=fxpar(header,"AIRMASS")
+    rdnoise=6.2
+    phzp=27.6 ;;ok for all the filters
+
+    ;;set wcs 
+    CD1_1   =   -5.86111e-05                      
+    CD2_1   =    0.0
+    CD1_2   =    0.0
+    CD2_2   =    5.86111e-05
+
+    ;;clean header 
+    sxdelpar, header, "AMPPSIZE"
+    sxdelpar, header, "DETLSIZE"
+endif
+
+;;obtain all the information that are instrument dependent
+if(instr eq 'ESI') then begin
+   
+   ;;define astro ralated stuff
+   rotpos=fxpar(header,"ROTPOSN")
+   ra=fxpar(header,"RA")    ;;in hhmmss
+   dec=fxpar(header,"DEC")  ;;in ddmmss
+   x_radec, ra, dec, rag, deg
+   
+   if keyword_set(deltawcs) then begin
+      
+      x_radec, ra, dec, rag-deltawcs[0]/3600., deg+deltawcs[1]/3600., /flip
+      x_radec, ra, dec, rag, deg
+      
+   endif
+   
+   ;;define number of extension and limit of the 2 ccd
+   pixscale=0.156  ;;first guess  
+   xpix=xfull
+   ypix=yfull
+   
+   next=nchip
+   xlim=[[0,xpix-1]]
+   ylim=[[0,ypix-1]]
+   
+   ;;bring frame NE and prepare to split the ccd
+   img_esi_rotate, sci, wgt, rotpos, xlim, ylim, header=header
+   
+   ;;define pointing center and CD matrix (calibrated for PA = 0)
+   xcenter=835.89583 
+   ycenter=593.24537 
+   
+   CD1_1   =   -4.27843396628E-05                               
+   CD2_1   =    5.03449625144E-06                              
+   CD1_2   =    4.88896521739E-06                            
+   CD2_2   =    4.21425598001E-05                             
+   
+   ;;define info 
+   airmass=fxpar(header,"AIRMASS")
+   rdnoise=2.7
+   phzp=28.5 ;;ok guess for all the filters
+   
+endif
+
+if(instr eq 'LBC') then begin
+   
+   ;;define astro ralated stuff
+   rotpos=fxpar(header,"PA_PNT")
+   ra=fxpar(header,"TELRA")    ;;in hhmmss
+   dec=fxpar(header,"TELDEC")  ;;in ddmmss
+   pixscale=0.224              ;;central chip
+   xpix=6292
+   ypix=6731
+   x_radec, ra, dec, rag, deg
+
+   if keyword_set(deltawcs) then begin
+      
+      x_radec, ra, dec, rag-deltawcs[0]/3600., deg+deltawcs[1]/3600., /flip
+      x_radec, ra, dec, rag, deg
+      
+   endif
+   
+   ;;define number of extension and limit of the 4 ccd
+   next=4
+   xlim=[[0,2047],[2122,4169],[4244,6291],[770,5377]]
+   ylim=[[0,4607],[0,4607],[0,4607],[4683,6730]]
+   
+   if(side eq 'B') then begin
+      ;;define pointing center
+      xcenter=3153+45
+      ycenter=2739+30
+   endif
+   
+   if(side eq 'R') then begin
+      ;;define pointing center
+      xcenter=3153+45
+      ycenter=2739+90
+   endif
+   
+   ;;bring frame NE and prepare to split the ccd
+   ;;CURRENTLY ASSUME THAT ALL FRAME ARE ALREADY ORIENTED NE
+   CD1_1   =   -6.22222241400E-05
+   CD1_2   =        0.00000000000
+   CD2_1   =        0.00000000000
+   CD2_2   =    6.22222241400E-05
+
+
+   ;;define info 
+   airmass=fxpar(header,"AIRMASS")
+   rdnoise=10. ;;ok value for both sides
+   phzp=27.5   ;;note that there is a big variation from filter to filter
+   
+endif
+
+;;obtain all the information that are instrument dependent
+if(instr eq 'IMACS') then begin
+
+   ;;define astro ralated stuff
+   ra=fxpar(header,"RA")      ;;in hhmmss
+   dec=fxpar(header,"DEC")    ;;in ddmmss
+   date=fxpar(header,"UT-DATE")
+   epoch=fxpar(header,"EPOCH")
+   
+   x_radec, ra, dec, rag, deg
+   precess, rag, deg, epoch, 2000.0
+   
+   if keyword_set(deltawcs) then begin
+      x_radec, ra, dec, rag-deltawcs[0]/3600.,$
+               deg+deltawcs[1]/3600., /flip
+      x_radec, ra, dec, rag, deg
+   endif
+   
+  
+   ;;set NE alignment 
+   if(dec lt -30) then begin
+      sci=rotate(sci,2)
+      wgt=rotate(wgt,2)
+   endif
+   
+
+   pixscale=0.111        
+   xpix=8192
+   ypix=8192 
+   
+   ;;define number of extension and limit of the ccds
+   next=8
+   xlim=intarr(2,8)
+   ylim=intarr(2,8)
+   
+   for amp=0, 7 do begin
+      ymin=0
+      ymax=4095
+      
+      ;;find position 
+      if(amp le 3) then begin
+         ys=ymin
+         ye=ymax
+         xs=8192-(amp+1)*2048
+         xe=8191-amp*2048
+      endif else begin 
+         ys=ymin+ymax+1
+         ye=ymax*2+1
+         xs=8192-(amp-4+1)*2048
+         xe=8191-(amp-4)*2048
+      endelse
+
+      xlim[0,amp]=xs
+      xlim[1,amp]=xe
+      ylim[0,amp]=ys
+      ylim[1,amp]=ye
+ 
+   endfor
+
+   ;;define pointing center (relative coordinates)
+   xcenter=xpix/2+2048
+   ycenter=ypix/2-2048
+     
+   ;;define info 
+   airmass=fxpar(header,"AIRMASS")
+   rdnoise=3.76 
+   phzp=27.5  ;;ok for all the filters
+   
+   ;;set wcs 
+   CD1_1   =   -3.08333e-05                             
+   CD2_1   =    0.0
+   CD1_2   =    0.0
+   CD2_2   =    3.08333e-05
+   
+endif
+
+;;create astro
+make_astr,astr, CD=[[CD1_1,CD1_2],[CD2_1,CD2_2]], $
+          CRPIX=[xcenter,ycenter], CRVAL=[rag,deg]
+putast, header, astr
+
+;;update the header with important info (image in in e/s)
+sxaddpar, header, 'SC_OBJ', object
+sxaddpar, header, 'SC_GAIN', 1.
+sxaddpar, header, 'SC_RDN', rdnoise
+sxaddpar, header, 'SC_EXP', 1.
+sxaddpar, header, 'SC_AIR', airmass
+sxaddpar, header, 'SC_FIL', filter
+sxaddpar, header, 'SC_ID', idgroup
+sxaddpar, header, 'SC_PH_C', phzp
+
+;if keyword_set(nophot) then sxaddpar, header, 'SC_PHFLA', string(0) else $
+;  sxaddpar, header, 'SC_PHFLA', string(1)
+
+;;now split in CCD and save as multiext images preserving wcs info
+for ext=0, next-1 do begin
+   
+   ;;for LRIS correct astro for chip 2 to account for chip gap 
+   if(instr eq 'LRIS'  and ext eq 1) then begin
+      ;;gap in pixel 
+      if(side eq 'R') then gap=28.61/0.135 else gap=15./0.135
+      if(rot_ang eq 1) then begin
+         ;;extension 1 goes to the bottom, and chip gap runs EW.
+         make_astr,astr, CD=[[CD1_1,CD1_2],[CD2_1,CD2_2]], $
+                   CRPIX=[xcenter,ycenter-gap], CRVAL=[rag,deg]
+         putast, header, astr
+      endif 
+      if(rot_ang eq 2) then begin
+         ;;extension 1 goes to the bottom, and chip gap runs EW.
+         make_astr,astr, CD=[[CD1_1,CD1_2],[CD2_1,CD2_2]], $
+                   CRPIX=[xcenter-gap,ycenter], CRVAL=[rag,deg]
+         putast, header, astr
+      endif
+      if((rot_ang ne 1) and (rot_ang ne 2)) then stop
+   endif
+
+   ;;for LRIS correct astro for chips 2-8 to account for chip gap 
+   if(instr eq 'IMACS' and ext gt 0) then begin
+     
+      ;;gap in pixel 
+      gap=62
+      if(ext le 3) then begin
+         ;;bottom raw
+         make_astr,astr, CD=[[CD1_1,CD1_2],[CD2_1,CD2_2]], $
+                   CRPIX=[xcenter+ext*gap,ycenter], CRVAL=[rag,deg]
+         putast, header, astr
+      endif else begin
+         ;;top raw
+         make_astr,astr, CD=[[CD1_1,CD1_2],[CD2_1,CD2_2]], $
+                   CRPIX=[xcenter+(ext-4)*gap,ycenter-gap], CRVAL=[rag,deg]
+         putast, header, astr
+      endelse
+   endif
+   
+   ;;preserve astro
+   hextract, sci, header, chip_sci, headup, xlim[0,ext],$
+             xlim[1,ext],ylim[0,ext],ylim[1,ext], /silent 
+   
+   hextract, wgt, header, chip_wgt, headup2, xlim[0,ext],$
+             xlim[1,ext],ylim[0,ext],ylim[1,ext], /silent 
+   
+   ;;if set, refine wcs in each frame
+   ;if keyword_set(refinewcs) then $
+   ;        img_refinewcs, chip_sci, chip_wgt, headup, instr=instr, name=filename, sdss=sdss
+      
+
+   ;;there seems to be a bug in sextractor to deal with wgt maps. 
+   ;;use none for none and inject bacgrkound in edges.
+   fake_sky=RANDOMN(Seed,n_elements(chip_sci[where(chip_wgt le 0)]))/$
+            median(sqrt(chip_wgt[where(chip_wgt gt 0)]))+median(chip_sci[where(chip_wgt gt 0)])
+   chip_sci[where(chip_wgt le 0)]=fake_sky
+   
+
+   ;;write proper multiextension fits 
+   if(ext eq 0) then begin
+      ;;make header extension
+      mwrfits, NULL,  path+"sci_"+filename, headup, /create
+      mwrfits, NULL,  path+"wgt_"+filename, headup, /create
+      
+      ;;in ext 1 write first image (with wcs header)
+      mkhdr, hdr, chip_sci      ;generate a basic FITS header
+      extast, headup, astr      ;copy wcs
+      putast, hdr, astr
+      mwrfits, chip_sci, path+"sci_"+filename, hdr
+      mwrfits, chip_wgt, path+"wgt_"+filename, hdr
+      
+   endif else begin
+      mkhdr, hdr, chip_sci      ;generate a basic FITS header
+      extast, headup, astr      ;copy wcs
+      putast, hdr, astr
+      mwrfits, chip_sci, path+"sci_"+filename, hdr
+      mwrfits, chip_wgt, path+"wgt_"+filename, hdr
+      
+   endelse
+   
+endfor
+
+end
+

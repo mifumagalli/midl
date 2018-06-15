@@ -1,0 +1,11 @@
+1) Read the image
+a=mrdfits('DLA1_U.fits')
+
+2) Load dinamic color table 
+fiddle_setup, 0
+
+3) Display the image 
+display, a
+
+4) Run the program
+ct_fiddle

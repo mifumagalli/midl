@@ -1,0 +1,105 @@
+;+
+; 
+; Take a data cube and produce an image in a given filter
+; wave       input wave 
+; cube       input cube  
+; variance   associated variance 
+; filter     id of a filter known to midl, or wave range 
+; outimg     output image in units of cube x
+; outvar     output variance
+; outhead    output header 
+; astro      the astro structure 
+; write      name of the output name 
+;-
+
+pro ifu_bandimage, wave, cube, var, filterid=filterid, outimg=outimg, outvar=outvar,$
+                   outhead=outhead, astro=astro, write=write
+
+  ;;load the filter curve
+  if keyword_set(filterid) then begin
+     if(n_elements(filterid) eq 1) then begin
+        getfilter, filterid, lambda=lambdaf, trans=transf
+        ;;for later interpolate filter over cube 
+        ledge=min(lambdaf[where(transf gt 5d-3)])
+        ridge=max(lambdaf[where(transf gt 5d-3)])
+     endif else begin
+        ;;if band pass use it
+        lambdaf=mkarr(filterid[0],filterid[1],1.)
+        transf=lambdaf-lambdaf+1.
+        ledge=filterid[0]
+        ridge=filterid[1]
+     endelse 
+  endif else begin
+     ;;if not set use white filter 
+     lambdaf=mkarr(3000.,10000.,1.)
+     transf=lambdaf-lambdaf+1.
+     ledge=min(wave)
+     ridge=max(wave)
+  endelse
+  
+
+  ;;is cube within range? 
+  if((max(wave) lt ridge) or (min(wave) gt ledge)) then begin
+     splog, 'Cube does not overlap fully with filters....'
+     stop
+  endif 
+  
+  ;;if ok, interpolate filter over cube
+  cut=where(wave ge ledge and wave le ridge)
+  wavec=wave[cut]
+  cubec=cube[*,*,cut]
+  varc=var[*,*,cut]
+
+  transfint=interpol(transf,lambdaf,wavec)
+  
+  ;;compute flux
+  sz=size(cubec)
+  colorimage=fltarr(sz[1],sz[2])
+  colorwgt=fltarr(sz[1],sz[2])
+  colorvar=fltarr(sz[1],sz[2])
+
+  ;;find dltal
+  deltal=wavec-shift(wavec,1)
+  deltal[0]=wavec[2]-wavec[1]
+  
+  for cc=0, n_elements(wavec)-1 do begin
+     
+     ;;find nans and kill them in variance 
+     nanfl=where(cubec[*,*,cc] ne cubec[*,*,cc], nnnan)
+     mask=fltarr(sz[1],sz[2])+1.
+     
+     if(nnnan gt 0) then  mask[nanfl]=0.
+     
+     ;;add masking nans 
+     colorimage=colorimage+mk_finite((cubec[*,*,cc]*transfint[cc]*deltal[cc]))*mask
+     colorwgt=colorwgt+transfint[cc]*mask*deltal[cc]
+     colorvar=colorvar+mk_finite(varc[*,*,cc])*mask*(transfint[cc]*deltal[cc])^2.
+
+  endfor
+
+  outimg=colorimage/colorwgt
+  outvar=colorvar/(colorwgt)^2
+  
+  ;;create header 
+  mkhdr, outhead, outimg  
+  putast, outhead, astro
+  
+  if keyword_set(write) then begin
+
+     mwrfits, null, write, outhead, /cre
+     mwrfits, outimg, write, outhead
+     mwrfits, outvar, write
+     
+  endif
+
+
+end
+
+
+
+
+
+
+
+
+

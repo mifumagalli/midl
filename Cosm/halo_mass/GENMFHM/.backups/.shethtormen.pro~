@@ -1,0 +1,89 @@
+;+
+;
+;Procedure that gives back the Sheth-Tormen mass function (2002)
+;using the code Reed, Bower, Frenk, Jenkins, and Theuns 2007, MNRAS, 374, 2
+;
+;THE CURRENT GRID OF HALO MASS IS COMPUTED USING THE POWER SPECTRUM
+;COMPUTED WITH WMAP3 PARAMETERS.....
+;
+;
+;
+;
+;
+;Return halo,  number density log_10[dn](h^3/Mpc^3/dlog10m)  
+;If the keyword \cumul is set, the output is log_10[n>M](h^3/Mpc^3)
+;
+;
+; mass           --> input, halo mass log (Msun h-1) [min,max]
+; redshift       --> the redshift to evaluate at (a closest match on a
+;                    grid is found)
+; cumul          --> if set, return the cumulative values
+; model          --> read a set of model for a given cosmological
+;                    parameter set 
+; mstar          --> if set, returns the characteristic mass sigma=delta_c
+;                    (log (Msun h-1))
+; nsig           --> if set is the number of sigma to which mstar is
+;                    computed (default is 1)
+;
+; sigmamz        --> if set, returns sigma(M,z)
+; 
+;Current allowed model
+;BOLSH
+;DEF
+;WMAP5
+;
+;
+;-
+
+function shethtormen, mass, redshift, model=model, cumul=cumul, silent=silent, $
+                      mstar=mstar, nsig=nsig, sigmamz=sigmamz
+
+
+;set the path
+path=getenv("MIDL")+'/Cosm/halo_mass/STDATA/'+model
+
+;get the list of the redshift
+spawn, "ls "+path+"*", list
+
+p1=strlen(model)
+redz=strmid(list,p1)
+
+;check if extrapolate
+if(redshift lt min(redz) or  redshift gt max(redz) and not keyword_set(silent)) $
+  then splog, 'Extrapolation!!!!!'
+
+
+
+;find closest
+diff_z=abs(redz-redshift)
+minindex=where(diff_z eq min(diff_z))
+
+if not keyword_set(silent) then splog, 'Closest redshift is', redz[minindex]
+
+
+;open file and read data
+;log_10[m](msun/h),log_10[dn](h**3/Mpc**3/dlog10m),log_10[n>M](h**3/Mpc**3) 
+
+
+readcol, path+'/'+list[minindex], mass_n, halo_n, halo_ncum, $
+  ln1sigma, f, sigmamz_n,  n_eff, silent=silent
+
+;make the interpolation on log space
+if ~keyword_set(cumul) then halo=interpol(halo_n,mass_n,mass) $
+else halo=interpol(halo_ncum,mass_n,mass)
+
+
+
+
+;;return sigma information
+sigmamz=interpol(sigmamz_n,mass_n,mass)   
+
+;;return mstar info
+if ~keyword_set(nsig) then nsig=1.
+mstar=interpol(mass_n,sigmamz_n,1.686/nsig) 
+     
+
+
+return, halo
+
+end

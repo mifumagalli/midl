@@ -1,0 +1,36 @@
+;+
+;
+; Return cumulative galaxy counts in a given band
+; Units are AB for magnitudes and N/arcsec^2 for cnts. 
+; 
+; [mag,cnt] output cumulative galaxy counts
+; band      desired band
+; maglim    optional, specify the limiting mag  
+; cntlim    if maglim set, return cnt above maglim
+;-
+
+
+pro galaxy_counts, mag, cnt, band=band, maglim=maglim, cntlim=cntlim
+
+  ;;get number of galaxies per sqrarcsec at m<mag
+  if(band eq 'uband') then cnt_grazian_uband, mag, cnt
+  if(band eq 'bband') then cnt_subaru_bband, mag, cnt
+  
+  
+  if keyword_set(maglim) then begin
+     
+     ;;compute
+     cntlim=interpol(cnt,mag,maglim)
+     
+     ;;check extrapolation 
+     limit=minmax(mag)
+     if(maglim lt limit[0] or maglim gt limit[1]) then begin
+        splog, 'Extrapol'
+        plot, mag, cnt, /ylog, xrange=[20,28.5]
+        oplot, [maglim,maglim], [cntlim,cntlim], psym=1
+        stop
+     endif
+     
+  endif
+
+end

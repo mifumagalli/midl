@@ -1,0 +1,89 @@
+
+
+This is a pipeline that reduces imaging from different telescopes.
+It is semiautomatic and it works in steps.
+
+Work on images that are NOT gzipped!!
+
+
+Requires: 
+IDL,Swarp,Scamp,WCSTools,SExtractor 
+
+
+1) Get all the images together: bias (not required), flats and images.
+   in a Raw folder. gzip as you wish. Then create a imgredux folder 
+   which is where everyting will happen. Enter this folder and 
+   start the pipeline. 
+
+2) Run img_makeplan.pro that reads the header and try to figure out  
+   what files do you have. This is not perfect (e.g. std will be flagged as 
+   flats etc..). So you will nedd to edit the output before moving to point 3.
+   By entering an appropriate group name, you'll be able to to move quickly 
+   through the second step of the reduction, when objects are combined 
+   together. A single combination of object should be chosen as a group. 
+   Subgroups will be handled automatically looking at the filter field. 
+   A 0 means skip that object.    
+
+
+3) Make the reduction of individual frames with img_ccdproc.
+   This procedure does the following:
+
+	- creates median bias
+        - creates flats
+        - process science frame by 
+                  .subtracting bias with oscan 
+                  .apply flat field
+		  .apply gain and rescale mosaic to common level
+		  .divide by exposure time
+		  .compute a weight image with flats
+		  .run la_cosmic to find CR and updates weight
+		  .update the header
+
+   At this point, every image is reduced, in units of e/s
+   If there are nasty pathological cases that need masking by hand, just 
+   add a file namefile.reg to a mask subfolder. This has to be a ds9 
+   region file in IRAF format (image corrdinates) with boxes
+   
+
+4) At this point call img_processall which does some preparation for 
+   img_wcsstack, such as preparation of the images assigning a first coarse 
+   wcs solution and fixing the problem of multiextension if needed
+   	- prepare the header with keyword used by scamp/swarp
+	- run sextractor to make a source catalogue
+
+   To fit wcs and combine the final image, use img_wcsstack.pro 
+   This procedure reads a list of reduced frame you want to combine and
+	- run scamp to fit astrometry. The default mode is for
+	  telescope with multiple ccd and the code solves iteratively
+ 	  for a mosaic. 
+	- prepare the images for stacking and runs swarp.
+ 	  Images are mean weighted combined. Scales are based on 
+	  first photometric attempt by scamp. Images are reprojected with 
+	  interpolation. Fluxes are also scaled for a constant values
+	  that compansate for repixeling (works ok if distorsions are not big)
+	- A final combined, wcs image is written. Weight is appended in 
+	  last extension. Sky sub happens here too
+	
+   If the stacked image has defects you can run img_deepclean within the   
+   swarp folder to flag more aggressively cosmic rays or mask by 
+   hands defects.  
+	
+   @ If WCS fails, can mock with deltawcs to improve first aligment. 
+   If does not qork, refine the fit on offending image by hand with 
+   midl/Astrometry/ccmap
+
+   To deal with the aggressive LRIS red cosmic rays, first run scamp 
+   in resemple mode, then run the img_sigmaclip procedure and 
+   finally run scamp in combine mode using img_mancomb.pro
+
+
+5) Finally, img_register.pro  perform the last operation for fields images 
+   with multiple filters.
+   
+   The code takes the first image as reference and register all the other 
+   images to that one, using the wcs information.
+   It also generates a mean combined white image that can be used to 
+   identify sources. Finally, the code makes a series of diagnostic plot 
+   for relative and absolute astrometry.
+
+   This does not correct for distorsions, so it's not really recommended. 
